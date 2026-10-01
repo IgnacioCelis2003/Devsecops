@@ -1,0 +1,55 @@
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+!.env.template
+*.secret
+*.secrets
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+/venv/
+*.egg-info/
+
+# Local databases and runtime state
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+postgres_api_data/
+
+# Reports, coverage and frontend dependencies/builds
+reports/
+vuln-api/coverage.xml
+vuln-api/.coverage
+.coverage
+frontend/coverage/
+frontend/node_modules/
+frontend/dist/
+node_modules/
+
+# TLS/private keys and generated certificates
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+nginx/ssl/
+certs_db/
+
+# Certificates and ACME state
+certbot/
+letsencrypt/
+
+# Logs, caches and local tooling
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.DS_Store
+.idea/
+.vscode/

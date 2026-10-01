@@ -1,0 +1,32 @@
+# Never send repository secrets or local machine state to a Docker build context
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+postgres_api_data/
+nginx/ssl/
+certbot/
+letsencrypt/
+
+# Dependencies, builds, caches and reports
+node_modules/
+frontend/dist/
+frontend/coverage/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+reports/
+*.log
