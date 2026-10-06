@@ -1,6 +1,6 @@
 # app/db.py
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
@@ -33,10 +33,25 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+
+def ensure_schema_compatibility():
+    """Apply small additive changes needed by existing local databases."""
+    inspector = inspect(engine)
+    if "wazuh_vulnerabilities" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("wazuh_vulnerabilities")}
+    if "tags" not in columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE wazuh_vulnerabilities "
+                    "ADD COLUMN tags JSON NOT NULL DEFAULT '[]'"
+                )
+            )
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-

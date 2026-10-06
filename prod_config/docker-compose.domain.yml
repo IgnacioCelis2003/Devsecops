@@ -20,6 +20,7 @@ services:
     container_name: api
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db-api:5432/${POSTGRES_DB}
+      SEED_EXAMPLE_DATA: "${SEED_EXAMPLE_DATA:-false}"
     depends_on:
       db-api:
         condition: service_healthy

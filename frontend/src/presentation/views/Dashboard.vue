@@ -281,6 +281,9 @@
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
                   <span>{{ vuln.agent_name || vuln.agent_id || 'N/A' }}</span>
                 </div>
+                <div v-if="vuln.tags?.length" class="tag-list" aria-label="Etiquetas Wazuh">
+                  <span v-for="tag in vuln.tags" :key="tag" class="badge-mini">{{ tag }}</span>
+                </div>
               </td>
               <td>
                 <div class="package-info">
@@ -925,6 +928,19 @@ th {
   align-items: center;
   gap: 0.5rem;
   color: var(--text-muted);
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+}
+
+.tag-list .badge-mini {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  text-transform: none;
 }
 
 .package-info {

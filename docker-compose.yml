@@ -34,6 +34,7 @@ services:
     environment:
       # Añadimos ?sslmode=require al final de la URL
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db-api:5432/${POSTGRES_DB}?sslmode=require"
+      SEED_EXAMPLE_DATA: "${SEED_EXAMPLE_DATA:-true}"
     depends_on:
       db-api:
         condition: service_healthy

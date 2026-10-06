@@ -19,6 +19,7 @@
               <th @click="sortBy('agent_name')">Equipo</th>
               <th @click="sortBy('cve_id')">CVE</th>
               <th @click="sortBy('severity')">Severidad</th>
+              <th>Etiquetas Wazuh</th>
               <th @click="sortBy('timeline_event_at')">Evento en slot</th>
               <th @click="sortBy('detected_at')">Detectado (Wazuh)</th>
               <th @click="sortBy('first_seen')">Primera vez (App)</th>
@@ -36,6 +37,10 @@
               <td><code>{{ vuln.cve_id }}</code></td>
               <td>{{ vuln.severity }}</td>
               <td>
+                <span v-if="vuln.tags?.length">{{ vuln.tags.join(', ') }}</span>
+                <span v-else>-</span>
+              </td>
+              <td>
                 <span v-if="vuln.timeline_event_at">
                   {{ fmtDateTime(vuln.timeline_event_at) }}
                   <small class="event-chip">{{ vuln.timeline_event_label }}</small>
@@ -50,7 +55,7 @@
               <td>{{ vuln.status === 'ACTIVE' ? 'ACTIVO' : 'RESUELTO' }}</td>
               <td>{{ vuln.resolved_at ? fmtDateTime(vuln.resolved_at) : '-' }}</td>
             </tr>
-            <tr v-if="rows.length === 0"><td colspan="12" class="empty-row">Sin coincidencias</td></tr>
+            <tr v-if="rows.length === 0"><td colspan="13" class="empty-row">Sin coincidencias</td></tr>
           </tbody>
         </table>
       </div>

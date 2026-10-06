@@ -39,7 +39,7 @@ confiable automáticamente por el navegador.
 
 ### Cargar datos de prueba Wazuh
 
-El archivo `datos_de_prueba_wazuh.json` contiene los datos de prueba. La imagen
+El archivo `vuln-api/app/datos_wazuh.json` contiene los datos de prueba. La imagen
 de la API ya incluye el importador y carga
 automáticamente el `.env` de la raíz. Después de levantar la base de datos,
 ejecútalo desde la raíz del repositorio:
@@ -54,6 +54,12 @@ interacciones del seed; no elimina usuarios. Para cargar otro archivo JSON:
 ```bash
 python vuln-api/app/load-data.py /ruta/al/archivo.json --replace
 ```
+
+En el entorno local Docker, el seed se carga automáticamente al iniciar la API
+porque `docker-compose.yml` y `docker-compose.nodomain.yml` habilitan
+`SEED_EXAMPLE_DATA` por defecto. La carga solo se ejecuta si todavía no existen
+vulnerabilidades; no reemplaza datos existentes automáticamente. Para
+deshabilitarla, define `SEED_EXAMPLE_DATA=false` en `.env`.
 
 Las contraseñas de conexiones que no sean tokens Fernet se cifran durante la
 carga. Las URL incluidas son datos ficticios, por lo que el botón de prueba o

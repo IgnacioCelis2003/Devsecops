@@ -1,0 +1,223 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "admin_sys",
+      "password_hash": "$2b$12$e83B/11Y29p3.q.8O.713eI6m9q1YyL7m8K1j9H0i1G2f3E4d5C6a",
+      "is_active": true,
+      "is_default_password": false,
+      "created_at": "2026-01-10T08:00:00Z"
+    },
+    {
+      "id": 2,
+      "username": "analyst_security",
+      "password_hash": "$2b$12$K89J21mN34p5.q.6O.814fJ7n0r2ZzM8n9L2k0I1H2G3F4E5D6b",
+      "is_active": true,
+      "is_default_password": true,
+      "created_at": "2026-02-01T09:30:00Z"
+    },
+    {
+      "id": 3,
+      "username": "auditor_guest",
+      "password_hash": "$2b$12$L90K32oO45q6.r.7P.915gK8o1s3AaN9o0M3l1J2I3H4G5F6E7c",
+      "is_active": false,
+      "is_default_password": true,
+      "created_at": "2026-02-15T14:15:00Z"
+    }
+  ],
+  "wazuh_connections": [
+    {
+      "id": 1,
+      "name": "Cluster-Produccion-US",
+      "indexer_url": "https://indexer-prod.internal.local:9200",
+      "wazuh_user": "wazuh_admin",
+      "wazuh_password": "EncryptedPasswordKey_019283",
+      "is_active": true,
+      "created_at": "2026-01-10T08:30:00Z",
+      "tested": true,
+      "last_tested_at": "2026-03-01T12:00:00Z",
+      "last_test_ok": true
+    },
+    {
+      "id": 2,
+      "name": "Cluster-Staging-EU",
+      "indexer_url": "https://indexer-stage.internal.local:9200",
+      "wazuh_user": "wazuh_stage",
+      "wazuh_password": "EncryptedPasswordKey_473829",
+      "is_active": true,
+      "created_at": "2026-01-15T10:00:00Z",
+      "tested": true,
+      "last_tested_at": "2026-03-01T11:45:00Z",
+      "last_test_ok": false
+    }
+  ],
+  "user_interactions": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "endpoint": "/api/v1/vulnerabilities",
+      "method": "GET",
+      "details": "Filtro aplicado: severity=CRITICAL",
+      "timestamp": "2026-03-01T10:15:22Z"
+    },
+    {
+      "id": 2,
+      "user_id": 2,
+      "endpoint": "/api/v1/vulnerabilities/101/status",
+      "method": "PATCH",
+      "details": "Actualización de estado de ACTIVE a IN_REVIEW",
+      "timestamp": "2026-03-01T10:30:00Z"
+    },
+    {
+      "id": 3,
+      "user_id": 1,
+      "endpoint": "/api/v1/connections/1/test",
+      "method": "POST",
+      "details": "Prueba de conectividad exitosa",
+      "timestamp": "2026-03-01T12:00:00Z"
+    }
+  ],
+  "wazuh_vulnerabilities": [
+    {
+      "id": 101,
+      "connection_id": 1,
+      "status": "ACTIVE",
+      "agent_id": "001",
+      "agent_name": "srv-db-primary",
+      "tags": ["production", "database", "linux", "critical-inventory"],
+      "os_full": "Ubuntu 22.04.3 LTS (Jammy Jellyfish)",
+      "os_platform": "ubuntu",
+      "os_version": "22.04",
+      "package_name": "openssl",
+      "package_version": "3.0.2-0ubuntu1.10",
+      "package_type": "deb",
+      "package_arch": "amd64",
+      "cve_id": "CVE-2024-0727",
+      "severity": "HIGH",
+      "score_base": 7.5,
+      "score_version": "3.1",
+      "detected_at": "2026-02-20T04:12:00Z",
+      "published_at": "2024-01-25T00:00:00Z",
+      "description": "Processing a maliciously formatted PKCS12 file may lead to a denial of service.",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2024-0727",
+      "scanner_vendor": "Wazuh Vulnerability Detector",
+      "first_seen": "2026-02-20T04:12:00Z",
+      "last_seen": "2026-03-01T06:00:00Z"
+    },
+    {
+      "id": 102,
+      "connection_id": 1,
+      "status": "ACTIVE",
+      "agent_id": "002",
+      "agent_name": "srv-app-web01",
+      "tags": ["production", "web", "linux", "internet-facing"],
+      "os_full": "Red Hat Enterprise Linux 9.2 (Plow)",
+      "os_platform": "rhel",
+      "os_version": "9.2",
+      "package_name": "xz",
+      "package_version": "5.6.1",
+      "package_type": "rpm",
+      "package_arch": "x86_64",
+      "cve_id": "CVE-2024-3094",
+      "severity": "CRITICAL",
+      "score_base": 10.0,
+      "score_version": "3.1",
+      "detected_at": "2026-02-22T02:00:00Z",
+      "published_at": "2024-03-29T00:00:00Z",
+      "description": "Malicious code was discovered in xz-utils versions 5.6.0 and 5.6.1 leading to SSH authentication bypass.",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2024-3094",
+      "scanner_vendor": "Wazuh Vulnerability Detector",
+      "first_seen": "2026-02-22T02:00:00Z",
+      "last_seen": "2026-03-01T06:00:00Z"
+    },
+    {
+      "id": 103,
+      "connection_id": 1,
+      "status": "MITIGATED",
+      "agent_id": "001",
+      "agent_name": "srv-db-primary",
+      "tags": ["production", "database", "linux", "remediated"],
+      "os_full": "Ubuntu 22.04.3 LTS (Jammy Jellyfish)",
+      "os_platform": "ubuntu",
+      "os_version": "22.04",
+      "package_name": "curl",
+      "package_version": "7.81.0-1ubuntu1.14",
+      "package_type": "deb",
+      "package_arch": "amd64",
+      "cve_id": "CVE-2023-38545",
+      "severity": "HIGH",
+      "score_base": 8.1,
+      "score_version": "3.1",
+      "detected_at": "2026-01-15T08:00:00Z",
+      "published_at": "2023-10-11T00:00:00Z",
+      "description": "SOCKS5 heap buffer overflow vulnerability in curl.",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2023-38545",
+      "scanner_vendor": "Wazuh Vulnerability Detector",
+      "first_seen": "2026-01-15T08:00:00Z",
+      "last_seen": "2026-02-10T18:00:00Z"
+    },
+    {
+      "id": 104,
+      "connection_id": 2,
+      "status": "ACTIVE",
+      "agent_id": "105",
+      "agent_name": "k8s-node-worker-01",
+      "tags": ["staging", "kubernetes", "worker", "container-runtime"],
+      "os_full": "Debian GNU/Linux 12 (bookworm)",
+      "os_platform": "debian",
+      "os_version": "12",
+      "package_name": "runc",
+      "package_version": "1.1.5+ds1-1+b1",
+      "package_type": "deb",
+      "package_arch": "amd64",
+      "cve_id": "CVE-2024-21626",
+      "severity": "HIGH",
+      "score_base": 8.6,
+      "score_version": "3.1",
+      "detected_at": "2026-02-25T11:20:00Z",
+      "published_at": "2024-01-31T00:00:00Z",
+      "description": "Leaky file descriptor issue in runc allowing container breakout.",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2024-21626",
+      "scanner_vendor": "Wazuh Vulnerability Detector",
+      "first_seen": "2026-02-25T11:20:00Z",
+      "last_seen": "2026-03-01T06:00:00Z"
+    }
+  ],
+  "vulnerability_history": [
+    {
+      "id": 1,
+      "vulnerability_id": 101,
+      "action": "DETECTED",
+      "details": "Vulnerabilidad detectada durante escaneo programado.",
+      "timestamp": "2026-02-20T04:12:00Z"
+    },
+    {
+      "id": 2,
+      "vulnerability_id": 101,
+      "action": "STATUS_CHANGED",
+      "details": "Estado actualizado a ACTIVE tras verificación de la firma.",
+      "timestamp": "2026-02-20T05:00:00Z"
+    },
+    {
+      "id": 3,
+      "vulnerability_id": 103,
+      "action": "DETECTED",
+      "details": "Escaneo inicial detectó paquete desactualizado.",
+      "timestamp": "2026-01-15T08:00:00Z"
+    },
+    {
+      "id": 4,
+      "vulnerability_id": 103,
+      "action": "RESOLVED",
+      "details": "Paquete actualizado a curl 7.81.0-1ubuntu1.16 en la máquina objetivo.",
+      "timestamp": "2026-02-10T18:00:00Z"
+    },
+    {
+      "id": 5,
+      "vulnerability_id": 104,
+      "action": "DETECTED",
+      "details": "Vulnerabilidad hallada en nodo Kubernetes staging.",
+      "timestamp": "2026-02-25T11:20:00Z"
+    }
+  ]
+}

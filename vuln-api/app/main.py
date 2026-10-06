@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from typing import List, Annotated, Optional
 from pydantic import BaseModel
 from sqlalchemy.sql import func
-from .db import Base, engine, get_db, SessionLocal
+from .db import Base, engine, ensure_schema_compatibility, get_db, SessionLocal
 from .models import User, WazuhVulnerability, WazuhConnection
 from .auth import (
     authenticate_user,
@@ -23,8 +23,10 @@ from .auth import (
 from .models import User, WazuhVulnerability, WazuhConnection, VulnerabilityHistory
 from .wazuh_client import fetch_all_vulns, test_connection
 from .crypto import encrypt, decrypt
+from .seed_data import seed_database
 
 Base.metadata.create_all(bind=engine)
+ensure_schema_compatibility()
 
 CONNECTION_NOT_FOUND = "Conexión no encontrada"
 DOMAINS_ALLOWLIST = [
@@ -36,7 +38,7 @@ CORS_ALLOW_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ALLOW_ORIGINS",
-        "https://localhost,https://127.0.0.1",
+        "http://localhost,https://127.0.0.1",
     ).split(",")
     if origin.strip()
 ]
@@ -76,7 +78,20 @@ def create_default_admin():
 
 create_default_admin()
 
+
+def seed_example_data_on_startup():
+    if os.getenv("SEED_EXAMPLE_DATA", "false").lower() != "true":
+        return
+    with SessionLocal() as db:
+        if db.query(WazuhVulnerability).first() is not None:
+            return
+    seed_database()
+
 app = FastAPI(title="Vulnerability Aggregator API", root_path="/api")
+
+@app.on_event("startup")
+def load_example_data_if_enabled():
+    seed_example_data_on_startup()
 
 app.add_middleware(
     CORSMiddleware,
@@ -396,6 +411,7 @@ def process_wazuh_vulnerabilities(db: Session, conn_id: int, raw_vulns: list) ->
 
     for v in raw_vulns:
         agent = v.get("agent", {})
+        tags = _extract_wazuh_tags(v)
         osinfo = (v.get("host") or {}).get("os") or {}
         pkg = v.get("package", {})
         vuln = v.get("vulnerability", {})
@@ -414,6 +430,7 @@ def process_wazuh_vulnerabilities(db: Session, conn_id: int, raw_vulns: list) ->
 
         if existing:
             seen_vuln_ids.add(existing.id)
+            existing.tags = tags
             # Actualiza last_seen para aprovechar la hypertable
             existing.last_seen = datetime.now(timezone.utc)
             _handle_existing_vuln(db, existing, vuln)
@@ -427,6 +444,7 @@ def process_wazuh_vulnerabilities(db: Session, conn_id: int, raw_vulns: list) ->
                 status="ACTIVE",
                 agent_id=agent.get("id"),
                 agent_name=agent.get("name"),
+                tags=tags,
                 os_full=osinfo.get("full"),
                 os_platform=osinfo.get("platform"),
                 os_version=osinfo.get("version"),
@@ -459,6 +477,32 @@ def process_wazuh_vulnerabilities(db: Session, conn_id: int, raw_vulns: list) ->
 
     _resolve_missing_vulns(db, active_vuln_dict, seen_vuln_ids)
     return count
+
+
+def _extract_wazuh_tags(vuln: dict) -> list[str]:
+    """Normalize tags and agent groups from Wazuh documents."""
+    agent = vuln.get("agent") or {}
+    values = []
+    for source in (vuln.get("tags"), agent.get("tags"), agent.get("groups")):
+        if isinstance(source, str):
+            values.append(source)
+        elif isinstance(source, dict):
+            if "name" in source:
+                values.append(str(source["name"]))
+            elif "key" in source and "value" in source:
+                values.append(f"{source['key']}={source['value']}")
+            else:
+                values.extend(f"{key}={value}" for key, value in source.items())
+        elif isinstance(source, (list, tuple, set)):
+            for item in source:
+                if isinstance(item, dict):
+                    if "name" in item:
+                        values.append(str(item["name"]))
+                    elif "key" in item and "value" in item:
+                        values.append(f"{item['key']}={item['value']}")
+                elif item is not None:
+                    values.append(str(item))
+    return list(dict.fromkeys(tag for tag in values if tag))
 
 
 
@@ -526,6 +570,7 @@ def list_vulns(
             "status": v.status,
             "agent_id": v.agent_id,
             "agent_name": v.agent_name,
+            "tags": v.tags or [],
             "os_full": v.os_full,
             "os_platform": v.os_platform,
             "os_version": v.os_version,
