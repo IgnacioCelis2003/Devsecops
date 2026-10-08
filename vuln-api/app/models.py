@@ -39,9 +39,6 @@ class User(Base):
     is_default_password = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     interactions = relationship("UserInteraction", back_populates="user")
-    """"
-    añadir etiquetas de usuario
-    """
     role = Column(String, nullable=True)
     email = Column(String, unique=True, index=True, nullable=True)
     tags = Column(JSON, nullable=False, default=list)
