@@ -75,6 +75,9 @@ def seed_database(json_path: str | Path = DEFAULT_DATA_PATH, replace: bool = Fal
             user.password_hash = item["password_hash"]
             user.is_active = item.get("is_active", False)
             user.is_default_password = item.get("is_default_password", True)
+            user.role = item.get("role")
+            user.email = item.get("email")
+            user.tags = normalize_tags(item.get("tags"))
             user.created_at = parse_datetime(item.get("created_at"))
             session.flush()
             user_ids[item["id"]] = user.id

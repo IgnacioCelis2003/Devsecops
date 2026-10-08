@@ -37,6 +37,10 @@ node_modules/
 *.p12
 *.pfx
 *.crt
+*.csr
+*.der
+*.jks
+*.keystore
 nginx/ssl/
 certs_db/
 
@@ -53,3 +57,7 @@ letsencrypt/
 .DS_Store
 .idea/
 .vscode/
+
+# Infrastructure state
+*.tfstate
+*.tfstate.*

@@ -4,6 +4,17 @@
 *.db
 *.sqlite
 *.sqlite3
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+*.der
+*.jks
+*.keystore
+*.tfstate
+*.tfstate.*
 __pycache__/
 *.py[cod]
 .pytest_cache/

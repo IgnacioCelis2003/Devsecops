@@ -6,6 +6,9 @@
       "password_hash": "$2b$12$e83B/11Y29p3.q.8O.713eI6m9q1YyL7m8K1j9H0i1G2f3E4d5C6a",
       "is_active": true,
       "is_default_password": false,
+      "role": "admin",
+      "email": "admin_sys@example.local",
+      "tags": ["administration", "production"],
       "created_at": "2026-01-10T08:00:00Z"
     },
     {
@@ -14,6 +17,9 @@
       "password_hash": "$2b$12$K89J21mN34p5.q.6O.814fJ7n0r2ZzM8n9L2k0I1H2G3F4E5D6b",
       "is_active": true,
       "is_default_password": true,
+      "role": "security_analyst",
+      "email": "analyst_security@example.local",
+      "tags": ["security", "vulnerability-management"],
       "created_at": "2026-02-01T09:30:00Z"
     },
     {
@@ -22,6 +28,9 @@
       "password_hash": "$2b$12$L90K32oO45q6.r.7P.915gK8o1s3AaN9o0M3l1J2I3H4G5F6E7c",
       "is_active": false,
       "is_default_password": true,
+      "role": "auditor",
+      "email": "auditor_guest@example.local",
+      "tags": ["audit", "read-only"],
       "created_at": "2026-02-15T14:15:00Z"
     }
   ],

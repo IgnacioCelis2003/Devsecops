@@ -61,6 +61,14 @@ porque `docker-compose.yml` y `docker-compose.nodomain.yml` habilitan
 vulnerabilidades; no reemplaza datos existentes automáticamente. Para
 deshabilitarla, define `SEED_EXAMPLE_DATA=false` en `.env`.
 
+El despliegue local redirige HTTP a HTTPS y usa un certificado autofirmado.
+Accede preferentemente mediante `https://localhost` o
+`https://127.0.0.1` y acepta el certificado en el navegador cuando se solicite.
+Si el navegador mantiene un rechazo anterior, elimina la excepción/certificado
+guardado para esa dirección y vuelve a abrirla. CORS permite explícitamente
+ambas direcciones con HTTP y HTTPS, pero CORS no puede solucionar un certificado
+TLS que el navegador no considera confiable.
+
 Las contraseñas de conexiones que no sean tokens Fernet se cifran durante la
 carga. Las URL incluidas son datos ficticios, por lo que el botón de prueba o
 la sincronización contra Wazuh no funcionarán hasta sustituirlas por un

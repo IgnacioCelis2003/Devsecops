@@ -8,6 +8,7 @@ from sqlalchemy import (
     Text,
     DateTime,
     Numeric,
+    JSON,
     UniqueConstraint,
     ForeignKey,
 )
@@ -43,7 +44,8 @@ class User(Base):
     """
     role = Column(String, nullable=True)
     email = Column(String, unique=True, index=True, nullable=True)
-    tags = Column(Text, nullable=True)
+    tags = Column(JSON, nullable=False, default=list)
+
 
 class WazuhConnection(Base):
     __tablename__ = "wazuh_connections"
@@ -84,6 +86,7 @@ class WazuhVulnerability(Base):
     os_version = Column(Text)
     package_name = Column(Text)
     package_version = Column(Text)
+    tags = Column(JSON, nullable=False, default=list)
     package_type = Column(Text)
     package_arch = Column(Text)
     cve_id = Column(Text, nullable=False)

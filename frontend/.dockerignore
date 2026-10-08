@@ -11,4 +11,10 @@ coverage/
 *.p12
 *.pfx
 *.crt
+*.csr
+*.der
+*.jks
+*.keystore
+*.tfstate
+*.tfstate.*
 *.log

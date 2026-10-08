@@ -9,6 +9,10 @@
 *.p12
 *.pfx
 *.crt
+*.csr
+*.der
+*.jks
+*.keystore
 *.db
 *.sqlite
 *.sqlite3
@@ -30,3 +34,5 @@ __pycache__/
 .cache/
 reports/
 *.log
+*.tfstate
+*.tfstate.*
