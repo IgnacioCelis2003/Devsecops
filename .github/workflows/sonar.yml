@@ -1,4 +1,4 @@
-name: CI + SonarQube
+name: CI + SonarCloud
 
 on:
   push:
@@ -20,10 +20,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ==========================================
+      # 1. BACKEND: Python + Pytest + Cobertura
+      # ==========================================
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: vuln-api/requirements.txt
 
       - name: Prepare virtualenv and install dependencies
         working-directory: ./vuln-api
@@ -32,34 +37,67 @@ jobs:
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
 
-      - name: Run tests (pytest) and generate coverage reports
+      - name: Run backend tests (pytest) and generate coverage
         working-directory: ./vuln-api
         run: |
           . .venv/bin/activate
           .venv/bin/pip install pytest pytest-cov
           .venv/bin/python -m pytest tests/ --junitxml=junit/test-results.xml --cov=app --cov-report=xml:coverage.xml --cov-report=html -q
 
-      - name: List coverage file
+      - name: Verify backend coverage file
         run: |
-          echo "coverage file: vuln-api/coverage.xml"
-          ls -l vuln-api/coverage.xml || true
+          echo "Verificando reporte de cobertura Backend:"
+          ls -lh vuln-api/coverage.xml || exit 1
 
-      - name: Upload coverage artifact
+      # ==========================================
+      # 2. FRONTEND: Node.js + Vitest + Cobertura LCOV
+      # ==========================================
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run frontend tests (vitest) and generate coverage
+        working-directory: ./frontend
+        run: npm run test:run
+
+      - name: Verify frontend coverage file
+        run: |
+          echo "Verificando reporte de cobertura Frontend:"
+          ls -lh frontend/coverage/lcov.info || exit 1
+
+      # ==========================================
+      # 3. Guardar artefactos de cobertura
+      # ==========================================
+      - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-xml
-          path: vuln-api/coverage.xml
+          name: coverage-reports
+          path: |
+            vuln-api/coverage.xml
+            frontend/coverage/lcov.info
 
-
+      # ==========================================
+      # 4. Análisis SonarCloud sobre Frontend + Backend
+      # ==========================================
       - name: SonarCloud Scan & Quality Gate
         uses: SonarSource/sonarqube-scan-action@v5.0.0
         with:
           args: >
-            -Dsonar.projectKey=StephanPaulRamirez_DevsecopsPriv
-            -Dsonar.organization=stephanpaulramirez
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || secrets.SONAR_PROJECT_KEY || 'IgnacioCelis2003_Devsecops' }}
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION || secrets.SONAR_ORGANIZATION || 'ignaciocelis2003' }}
+            -Dsonar.sources=vuln-api/app,frontend/src
+            -Dsonar.tests=vuln-api/tests,frontend/tests
             -Dsonar.python.coverage.reportPaths=vuln-api/coverage.xml
-            -Dsonar.sources=vuln-api/app
-            -Dsonar.tests=vuln-api/tests
+            -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.spec.js,**/*.test.js,**/junit/**,vuln-api/app/seed_data.py,vuln-api/app/datos_wazuh.json
+            -Dsonar.coverage.exclusions=**/tests/**,**/node_modules/**,**/coverage/**,frontend/src/main.js,vuln-api/app/seed_data.py
             -Dsonar.qualitygate.wait=true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
