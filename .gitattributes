@@ -1,0 +1,2 @@
+# Asegurar que los scripts de shell siempre utilicen saltos de línea LF (Unix)
+*.sh text eol=lf

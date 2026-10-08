@@ -1,6 +1,5 @@
-# app/wazuh_client.py
-# Re-export from app.clients.wazuh_client for clean modular architecture and backwards compatibility
-from .clients.wazuh_client import (
+# app/clients/__init__.py
+from .wazuh_client import (
     fetch_all_vulns,
     test_connection,
     is_safe_url,
