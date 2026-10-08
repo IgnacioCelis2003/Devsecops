@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from app import wazuh_client
+from app.clients import wazuh_client
 import requests
 
 def test_get_auth_header():
@@ -9,8 +9,8 @@ def test_get_auth_header():
     assert headers["Authorization"].startswith("Basic ")
     assert headers["Content-Type"] == "application/json"
 
-@patch("app.wazuh_client.requests.post")
-@patch("app.wazuh_client.requests.delete")
+@patch("app.clients.wazuh_client.requests.post")
+@patch("app.clients.wazuh_client.requests.delete")
 def test_fetch_all_vulns_success(mock_delete, mock_post):
     # Simulate two pages of results
     mock_post_page1 = MagicMock()
@@ -60,8 +60,8 @@ def test_fetch_all_vulns_success(mock_delete, mock_post):
     delete_kwargs = mock_delete.call_args[1]
     assert delete_kwargs["json"] == {"scroll_id": ["scroll_123"]}
 
-@patch("app.wazuh_client.requests.post")
-@patch("app.wazuh_client.requests.delete")
+@patch("app.clients.wazuh_client.requests.post")
+@patch("app.clients.wazuh_client.requests.delete")
 def test_fetch_all_vulns_delete_exception(mock_delete, mock_post):
     # Simulate one page of results (empty)
     mock_post_page1 = MagicMock()
@@ -79,7 +79,7 @@ def test_fetch_all_vulns_delete_exception(mock_delete, mock_post):
     assert len(results) == 0
     mock_delete.assert_called_once()
 
-@patch("app.wazuh_client.requests.post")
+@patch("app.clients.wazuh_client.requests.post")
 def test_fetch_all_vulns_post_exception(mock_post):
     # Simulate a requests.exceptions.HTTPError
     mock_post.side_effect = requests.exceptions.HTTPError("Bad Request")
@@ -87,7 +87,7 @@ def test_fetch_all_vulns_post_exception(mock_post):
     with pytest.raises(requests.exceptions.HTTPError):
         wazuh_client.fetch_all_vulns("http://localhost", "user", "pass")
 
-@patch("app.wazuh_client.requests.get")
+@patch("app.clients.wazuh_client.requests.get")
 def test_test_connection_success(mock_get):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -97,7 +97,7 @@ def test_test_connection_success(mock_get):
     result = wazuh_client.test_connection("http://localhost", "user", "pass")
     assert result is True
 
-@patch("app.wazuh_client.requests.get")
+@patch("app.clients.wazuh_client.requests.get")
 def test_test_connection_failure(mock_get):
     mock_resp = MagicMock()
     mock_resp.status_code = 401
@@ -107,7 +107,7 @@ def test_test_connection_failure(mock_get):
     result = wazuh_client.test_connection("http://localhost", "user", "pass")
     assert result is False
 
-@patch("app.wazuh_client.requests.get")
+@patch("app.clients.wazuh_client.requests.get")
 def test_test_connection_exception(mock_get):
     mock_get.side_effect = requests.exceptions.ConnectionError("Connection Refused")
     

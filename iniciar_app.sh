@@ -18,8 +18,8 @@ echo "================================================="
 read -p "Selecciona una opción (1 o 2): " OPCION
 
 if [ "$OPCION" == "1" ]; then
-    echo -e "\n[+] Deteniendo contenedores y limpiando certificados anteriores..."
-    sudo docker compose down 2>/dev/null
+    echo -e "\n[+] Deteniendo contenedores y limpiando certificados y volúmenes anteriores..."
+    sudo docker compose down -v 2>/dev/null
     rm -rf ./certbot ./nginx/ssl
 
     echo "[+] Configurando entorno SIN dominio..."
@@ -41,14 +41,26 @@ if [ "$OPCION" == "1" ]; then
 
     # --- NUEVA LÓGICA: PERMISOS SEGUROS PARA DB (INICIO) ---
     echo "[+] Configurando permisos seguros para Base de Datos..."
+    # Limpiar y preparar directorio en el HOME del usuario
+    sudo rm -rf "$DB_CERT_DEST"
     mkdir -p "$DB_CERT_DEST"
     sudo cp ./nginx/ssl/nginx-selfsigned.crt "$DB_CERT_DEST/"
     sudo cp ./nginx/ssl/nginx-selfsigned.key "$DB_CERT_DEST/"
-    
-    # Aplicar dueño 999 (usuario postgres) y permisos restrictivos 600
     sudo chown 999:999 "$DB_CERT_DEST/nginx-selfsigned.key" "$DB_CERT_DEST/nginx-selfsigned.crt"
     sudo chmod 600 "$DB_CERT_DEST/nginx-selfsigned.key"
-    echo "[+] Certificados replicados en $DB_CERT_DEST con permisos 600."
+    sudo chmod 644 "$DB_CERT_DEST/nginx-selfsigned.crt"
+
+    # Replicar también en /root/certs_db para cuando docker compose se ejecute bajo sudo (donde HOME=/root)
+    if [ -d "/root" ]; then
+        sudo rm -rf /root/certs_db
+        sudo mkdir -p /root/certs_db
+        sudo cp ./nginx/ssl/nginx-selfsigned.crt /root/certs_db/
+        sudo cp ./nginx/ssl/nginx-selfsigned.key /root/certs_db/
+        sudo chown 999:999 /root/certs_db/nginx-selfsigned.key /root/certs_db/nginx-selfsigned.crt
+        sudo chmod 600 /root/certs_db/nginx-selfsigned.key
+        sudo chmod 644 /root/certs_db/nginx-selfsigned.crt
+    fi
+    echo "[+] Certificados replicados en $DB_CERT_DEST y /root/certs_db con permisos 600."
     # --- NUEVA LÓGICA: PERMISOS SEGUROS PARA DB (FIN) ---
 
     # --- LÓGICA DE CRON: ELIMINACIÓN SEGURA ---
@@ -58,7 +70,7 @@ if [ "$OPCION" == "1" ]; then
     fi
 
     echo "[+] Levantando contenedores..."
-    sudo docker compose up -d --build
+    sudo -E docker compose up -d --build
 
 elif [ "$OPCION" == "2" ]; then
     echo -e "\n[+] Configurando entorno CON dominio..."
