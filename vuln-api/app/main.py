@@ -12,8 +12,10 @@ from .crypto import encrypt, decrypt
 from .seed_data import seed_database
 from .services.wazuh_sync_service import process_wazuh_vulnerabilities
 
-# Routers desacoplados
-from .routers import auth_router, users_router, wazuh_router, vulns_router
+from .routers.auth_router import router as auth_router
+from .routers.users_router import router as users_router
+from .routers.wazuh_router import router as wazuh_router
+from .routers.vulns_router import router as vulns_router
 
 # Schemas Pydantic reexportados para retrocompatibilidad
 from .schemas import (
