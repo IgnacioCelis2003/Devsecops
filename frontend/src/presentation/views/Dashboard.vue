@@ -718,12 +718,19 @@ const isRecentlySeen = (lastSeenDate) => {
 }
 
 const getTimelineProgress = (vuln) => {
-  
   if (vuln.dwell_time_days !== undefined && vuln.total_age_days !== undefined && vuln.total_age_days > 0) {
     if (vuln.dwell_time_days === 0) return 0
     return Math.min(100, Math.max(5, (vuln.dwell_time_days / vuln.total_age_days) * 100))
   }
-  
+  if (vuln.first_seen && vuln.last_seen) {
+    const first = new Date(vuln.first_seen).getTime()
+    const last = new Date(vuln.last_seen).getTime()
+    const now = Date.now()
+    const totalAge = now - first
+    const dwell = last - first
+    if (dwell <= 0 || totalAge <= 0) return 0
+    return Math.min(100, Math.max(5, (dwell / totalAge) * 100))
+  }
   return 0
 }
 

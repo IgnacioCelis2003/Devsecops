@@ -331,20 +331,30 @@ describe('TimelineDetailModal.vue', () => {
       }
     })
 
-    const headers = wrapper.findAll('th')
     const columns = [
-      'connection_name', 'agent_name', 'cve_id', 'severity',
-      'timeline_event_at', 'detected_at', 'first_seen',
-      'last_seen', 'status', 'resolved_at'
+      { text: 'Conexion', key: 'connection_name' },
+      { text: 'Equipo', key: 'agent_name' },
+      { text: 'CVE', key: 'cve_id' },
+      { text: 'Severidad', key: 'severity' },
+      { text: 'Evento en slot', key: 'timeline_event_at' },
+      { text: 'Detectado (Wazuh)', key: 'detected_at' },
+      { text: 'Primera vez (App)', key: 'first_seen' },
+      { text: 'Ultimo sync', key: 'last_seen' },
+      { text: 'Días Activa', key: 'dwell_time_days' },
+      { text: 'Edad Total', key: 'total_age_days' },
+      { text: 'Estado', key: 'status' },
+      { text: 'Resolucion', key: 'resolved_at' }
     ]
 
-    for (let i = 0; i < headers.length; i++) {
-      await headers[i].trigger('click')
-      expect(wrapper.vm.sortKey).toBe(columns[i])
+    for (const col of columns) {
+      const header = wrapper.findAll('th').find(h => h.text() === col.text)
+      expect(header).toBeDefined()
+      await header.trigger('click')
+      expect(wrapper.vm.sortKey).toBe(col.key)
       expect(wrapper.vm.sortOrder).toBe(1)
 
       // Click again to reverse
-      await headers[i].trigger('click')
+      await header.trigger('click')
       expect(wrapper.vm.sortOrder).toBe(-1)
     }
   })

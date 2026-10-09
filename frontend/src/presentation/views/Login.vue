@@ -89,9 +89,9 @@ const handleLogin = async () => {
     }
 
   } catch (err) {
-    if (err.response && err.response.data.detail) {
+    if (err.response?.data?.detail) {
       error.value = err.response.data.detail
-    } else if (err.response) {
+    } else if (err.response?.status) {
       error.value = `El servidor respondió con un error (${err.response.status}).`
     } else {
       error.value = 'Ha ocurrido un error al conectar con el servidor.'
