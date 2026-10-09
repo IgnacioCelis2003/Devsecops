@@ -9,8 +9,8 @@ from app.crypto import encrypt
 
 #helpers
 
-def _create_user(db, username="admin", password="admin", is_active=True):
-    user = User(username=username, password_hash=hash_password(password), is_active=is_active)
+def _create_user(db, username="admin", password="admin", is_active=True, is_default_password=False):
+    user = User(username=username, password_hash=hash_password(password), is_active=is_active, is_default_password=is_default_password)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -109,7 +109,7 @@ def test_sync_vulnerabilities_unauthorized(client, db_session):
 @patch("app.routers.wazuh_router.fetch_all_vulns")
 def test_sync_vulnerabilities_success(mock_fetch, client, db_session):
     from app.auth import hash_password
-    test_user = User(username="admin", password_hash=hash_password("admin"), is_active=True)
+    test_user = User(username="admin", password_hash=hash_password("admin"), is_active=True, is_default_password=False)
     db_session.add(test_user)
     conn = WazuhConnection(
         name="test", indexer_url="https://wazuh.local:9200",
@@ -185,6 +185,54 @@ def test_change_password_mismatch(client, db_session):
     res = client.post("/auth/change-password",
                       json={"old_password": "admin", "new_password": "Nueva123!", "confirm_password": "Otra456!"},
                       headers=_get_headers(client))
+    assert res.status_code == 400
+
+
+def test_login_rate_limiting(client, db_session):
+    _create_user(db_session, username="bruteforce_user")
+    for _ in range(5):
+        client.post("/auth/login", data={"username": "bruteforce_user", "password": "wrong"})
+    res = client.post("/auth/login", data={"username": "bruteforce_user", "password": "wrong"})
+    assert res.status_code == 429
+
+
+def test_change_password_weak_password_length(client, db_session):
+    _create_user(db_session, username="weak_user")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "Short1!", "confirm_password": "Short1!"},
+                      headers=_get_headers(client, username="weak_user", password="admin"))
+    assert res.status_code == 400
+
+
+def test_change_password_weak_password_no_uppercase(client, db_session):
+    _create_user(db_session, username="weak_user2")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "lowercase1!", "confirm_password": "lowercase1!"},
+                      headers=_get_headers(client, username="weak_user2", password="admin"))
+    assert res.status_code == 400
+
+
+def test_change_password_weak_password_no_lowercase(client, db_session):
+    _create_user(db_session, username="weak_user3")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "UPPERCASE1!", "confirm_password": "UPPERCASE1!"},
+                      headers=_get_headers(client, username="weak_user3", password="admin"))
+    assert res.status_code == 400
+
+
+def test_change_password_weak_password_no_number(client, db_session):
+    _create_user(db_session, username="weak_user4")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "NoNumberABC!", "confirm_password": "NoNumberABC!"},
+                      headers=_get_headers(client, username="weak_user4", password="admin"))
+    assert res.status_code == 400
+
+
+def test_change_password_weak_password_no_special(client, db_session):
+    _create_user(db_session, username="weak_user5")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "NoSpecial123", "confirm_password": "NoSpecial123"},
+                      headers=_get_headers(client, username="weak_user5", password="admin"))
     assert res.status_code == 400
 
 #users me
