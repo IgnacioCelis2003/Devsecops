@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import User, WazuhConnection, WazuhVulnerability
-from ..auth import get_current_user
+from ..auth import get_current_user_enforcing_password_change
 from ..clients.wazuh_client import fetch_all_vulns
 from ..crypto import decrypt
 from ..services.wazuh_sync_service import process_wazuh_vulnerabilities
@@ -16,7 +16,7 @@ router = APIRouter()
 
 @router.post("/sync-all")
 def sync_all_connections(
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user_enforcing_password_change)
 ):
     conns = db.query(WazuhConnection).filter(WazuhConnection.is_active == True).all()
     results = []
@@ -45,7 +45,7 @@ def list_vulns(
     limit: Optional[int] = None,
     connection_id: int = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
 ):
     query = db.query(
         WazuhVulnerability,

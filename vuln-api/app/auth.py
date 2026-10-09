@@ -59,3 +59,12 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         raise creds_exc
     return user
 
+
+def get_current_user_enforcing_password_change(current_user: User = Depends(get_current_user)):
+    if current_user.is_default_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debe cambiar su contraseña por defecto antes de continuar."
+        )
+    return current_user
+

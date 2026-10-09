@@ -1,7 +1,8 @@
 # app/routers/auth_router.py
 import re
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -18,14 +19,45 @@ from ..schemas.auth_schemas import ChangePasswordRequest
 
 router = APIRouter()
 
+login_attempts = {}
+MAX_ATTEMPTS = 5
+BLOCK_DURATION_MINUTES = 15
+
 
 @router.post("/login")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
-    user = authenticate_user(db, form_data.username, form_data.password)
+    now = datetime.now(timezone.utc)
+    username = form_data.username
+    if username in login_attempts:
+        record = login_attempts[username]
+        if record["blocked_until"] and now < record["blocked_until"]:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Demasiados intentos fallidos. Cuenta bloqueada temporalmente por 15 minutos."
+            )
+        if record["blocked_until"] and now >= record["blocked_until"]:
+            login_attempts[username] = {"count": 0, "blocked_until": None}
+
+    user = authenticate_user(db, username, form_data.password)
     if not user:
+        if username not in login_attempts:
+            login_attempts[username] = {"count": 1, "blocked_until": None}
+        else:
+            login_attempts[username]["count"] += 1
+
+        if login_attempts[username]["count"] >= MAX_ATTEMPTS:
+            login_attempts[username]["blocked_until"] = now + timedelta(minutes=BLOCK_DURATION_MINUTES)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Demasiados intentos fallidos. Cuenta bloqueada temporalmente por 15 minutos."
+            )
         raise HTTPException(status_code=400, detail="Usuario o contraseña incorrectos")
+
+    if username in login_attempts:
+        del login_attempts[username]
+
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 

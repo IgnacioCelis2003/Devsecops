@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import User
-from ..auth import get_current_user, hash_password
+from ..auth import get_current_user, get_current_user_enforcing_password_change, hash_password
 from ..schemas.user_schemas import NewUserRequest
 
 router = APIRouter()
@@ -23,7 +23,7 @@ def get_user_me(current_user: User = Depends(get_current_user)):
 @router.post("")
 def create_user(
     request: NewUserRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
     db: Session = Depends(get_db),
 ):
     existing = db.query(User).filter(User.username == request.username).first()
@@ -42,7 +42,7 @@ def create_user(
 
 @router.get("")
 def list_users(
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user_enforcing_password_change), db: Session = Depends(get_db)
 ):
     users = db.query(User).all()
     return [{"id": u.id, "username": u.username} for u in users]
@@ -51,7 +51,7 @@ def list_users(
 @router.delete("/{user_id}")
 def delete_user(
     user_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
     db: Session = Depends(get_db),
 ):
     if current_user.id == user_id:

@@ -7,7 +7,7 @@ from sqlalchemy.sql import func
 
 from ..db import get_db
 from ..models import User, WazuhConnection
-from ..auth import get_current_user
+from ..auth import get_current_user_enforcing_password_change
 from ..clients.wazuh_client import test_connection, fetch_all_vulns
 from ..crypto import encrypt, decrypt
 from ..schemas.wazuh_schemas import WazuhConnectionRequest
@@ -25,7 +25,7 @@ DOMAINS_ALLOWLIST = [
 
 @router.get("")
 def list_connections(
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user_enforcing_password_change), db: Session = Depends(get_db)
 ):
     conns = db.query(WazuhConnection).all()
     return [
@@ -46,7 +46,7 @@ def list_connections(
 @router.post("", status_code=201)
 def create_connection(
     request: WazuhConnectionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
     db: Session = Depends(get_db),
 ):
     # verify unique name
@@ -90,7 +90,7 @@ def create_connection(
 def update_connection(
     conn_id: int,
     request: WazuhConnectionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
     db: Session = Depends(get_db),
 ):
     conn = db.query(WazuhConnection).filter(WazuhConnection.id == conn_id).first()
@@ -115,7 +115,7 @@ def update_connection(
 @router.delete("/{conn_id}")
 def delete_connection(
     conn_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
     db: Session = Depends(get_db),
 ):
     conn = db.query(WazuhConnection).filter(WazuhConnection.id == conn_id).first()
@@ -129,7 +129,7 @@ def delete_connection(
 @router.post("/{conn_id}/test")
 def test_wazuh_connection(
     conn_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
     db: Session = Depends(get_db),
 ):
     conn = db.query(WazuhConnection).filter(WazuhConnection.id == conn_id).first()
@@ -152,7 +152,7 @@ def test_wazuh_connection(
 def sync_connection(
     conn_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
 ):
     conn = db.query(WazuhConnection).filter(WazuhConnection.id == conn_id).first()
     if not conn:
