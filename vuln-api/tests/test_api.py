@@ -187,6 +187,54 @@ def test_change_password_mismatch(client, db_session):
                       headers=_get_headers(client))
     assert res.status_code == 400
 
+
+def test_login_rate_limiting(client, db_session):
+    _create_user(db_session, username="bruteforce_user")
+    for _ in range(5):
+        client.post("/auth/login", data={"username": "bruteforce_user", "password": "wrong"})
+    res = client.post("/auth/login", data={"username": "bruteforce_user", "password": "wrong"})
+    assert res.status_code == 429
+
+
+def test_change_password_weak_password_length(client, db_session):
+    _create_user(db_session, username="weak_user")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "Short1!", "confirm_password": "Short1!"},
+                      headers=_get_headers(client, username="weak_user", password="admin"))
+    assert res.status_code == 400
+
+
+def test_change_password_weak_password_no_uppercase(client, db_session):
+    _create_user(db_session, username="weak_user2")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "lowercase1!", "confirm_password": "lowercase1!"},
+                      headers=_get_headers(client, username="weak_user2", password="admin"))
+    assert res.status_code == 400
+
+
+def test_change_password_weak_password_no_lowercase(client, db_session):
+    _create_user(db_session, username="weak_user3")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "UPPERCASE1!", "confirm_password": "UPPERCASE1!"},
+                      headers=_get_headers(client, username="weak_user3", password="admin"))
+    assert res.status_code == 400
+
+
+def test_change_password_weak_password_no_number(client, db_session):
+    _create_user(db_session, username="weak_user4")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "NoNumberABC!", "confirm_password": "NoNumberABC!"},
+                      headers=_get_headers(client, username="weak_user4", password="admin"))
+    assert res.status_code == 400
+
+
+def test_change_password_weak_password_no_special(client, db_session):
+    _create_user(db_session, username="weak_user5")
+    res = client.post("/auth/change-password",
+                      json={"old_password": "admin", "new_password": "NoSpecial123", "confirm_password": "NoSpecial123"},
+                      headers=_get_headers(client, username="weak_user5", password="admin"))
+    assert res.status_code == 400
+
 #users me
 
 def test_get_me(client, db_session):
