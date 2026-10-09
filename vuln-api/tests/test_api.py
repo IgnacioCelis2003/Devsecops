@@ -9,8 +9,8 @@ from app.crypto import encrypt
 
 #helpers
 
-def _create_user(db, username="admin", password="admin", is_active=True):
-    user = User(username=username, password_hash=hash_password(password), is_active=is_active)
+def _create_user(db, username="admin", password="admin", is_active=True, is_default_password=False):
+    user = User(username=username, password_hash=hash_password(password), is_active=is_active, is_default_password=is_default_password)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -109,7 +109,7 @@ def test_sync_vulnerabilities_unauthorized(client, db_session):
 @patch("app.routers.wazuh_router.fetch_all_vulns")
 def test_sync_vulnerabilities_success(mock_fetch, client, db_session):
     from app.auth import hash_password
-    test_user = User(username="admin", password_hash=hash_password("admin"), is_active=True)
+    test_user = User(username="admin", password_hash=hash_password("admin"), is_active=True, is_default_password=False)
     db_session.add(test_user)
     conn = WazuhConnection(
         name="test", indexer_url="https://wazuh.local:9200",
