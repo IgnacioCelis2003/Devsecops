@@ -1,0 +1,138 @@
+name: DAST - OWASP ZAP Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  dast-scan:
+    name: OWASP ZAP Dynamic Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ==========================================
+      # 1. SETUP PYTHON & START BACKEND API
+      # ==========================================
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'vuln-api/requirements.txt'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r vuln-api/requirements.txt
+
+      - name: Start FastAPI backend
+        run: |
+          cd vuln-api
+          export ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          export SECRET_KEY="dev-secret-key"
+          export DATABASE_URL="sqlite:///./zap_test.db"
+          export SEED_EXAMPLE_DATA="true"
+          export VERIFY_SSL="false"
+          export DOMAINS_ALLOWLIST="localhost,127.0.0.1"
+          export CORS_ALLOW_ORIGINS="http://localhost,http://127.0.0.1"
+
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          cd ..
+
+      - name: Wait for API to be healthy
+        run: |
+          echo "Esperando a que la API responda en http://localhost:8000/docs..."
+          for i in {1..30}; do
+            if curl -s -f http://localhost:8000/docs > /dev/null; then
+              echo "¡API activa y respondiendo correctamente!"
+              break
+            fi
+            echo "Esperando... ($i/30)"
+            sleep 1
+          done
+
+      # ==========================================
+      # 2. SETUP NODE & BUILD/START FRONTEND
+      # ==========================================
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+          cd ..
+
+      - name: Serve frontend
+        run: |
+          cd frontend/dist
+          nohup python -m http.server 3000 > frontend.log 2>&1 &
+          cd ../..
+          sleep 2
+
+      # ==========================================
+      # 3. RUN OWASP ZAP SCANS (API + FRONTEND)
+      # ==========================================
+      - name: Prepare reports directory
+        run: |
+          mkdir -p zap-reports
+          chmod 777 zap-reports
+
+      - name: ZAP API Scan (OpenAPI Specification)
+        run: |
+          echo "Ejecutando ZAP API Scan contra la API de FastAPI..."
+          docker run --rm \
+            --network host \
+            -v $(pwd)/zap-reports:/zap/wrk:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py \
+            -t http://localhost:8000/openapi.json \
+            -f openapi \
+            -r zap_api_report.html \
+            -J zap_api_report.json \
+            -I || true
+
+      - name: ZAP Baseline Scan (Frontend Web Application)
+        run: |
+          echo "Ejecutando ZAP Baseline Scan contra el Frontend..."
+          docker run --rm \
+            --network host \
+            -v $(pwd)/zap-reports:/zap/wrk:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t http://localhost:3000 \
+            -r zap_frontend_report.html \
+            -J zap_frontend_report.json \
+            -I || true
+
+      # ==========================================
+      # 4. UPLOAD ARTIFACTS & GITHUB STEP SUMMARY
+      # ==========================================
+      - name: Upload ZAP Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-dast-security-reports
+          path: zap-reports/
+          retention-days: 14
+
+      - name: Generate Job Summary
+        if: always()
+        run: |
+          echo "## 🛡️ OWASP ZAP DAST Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Componente | Tipo de Escaneo | Objetivo | Reporte Generado |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Backend API** | OpenAPI Full API Scan | \`http://localhost:8000/openapi.json\` | \`zap_api_report.html\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Frontend UI** | Baseline Passive & Spider Scan | \`http://localhost:3000\` | \`zap_frontend_report.html\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Los reportes HTML interactivos completos se encuentran disponibles para descargar en la sección de **Artifacts** de esta ejecución." >> $GITHUB_STEP_SUMMARY
