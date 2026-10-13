@@ -5,7 +5,8 @@ import base64
 from urllib.parse import urlparse, quote
 
 VULN_INDEX = "wazuh-states-vulnerabilities-*"
-VERIFY_SSL = os.getenv("VERIFY_SSL", "True").lower() == "true"
+_ca_bundle = os.getenv("WAZUH_CA_BUNDLE")
+VERIFY_SSL = _ca_bundle if _ca_bundle else (os.getenv("VERIFY_SSL", "True").lower() == "true")
 DOMAINS_ALLOWLIST = os.getenv("DOMAINS_ALLOWLIST", "localhost").split(",")
 
 

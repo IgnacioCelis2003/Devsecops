@@ -113,3 +113,13 @@ def test_test_connection_exception(mock_get):
     
     result = wazuh_client.test_connection("http://localhost", "user", "pass")
     assert result is False
+
+
+def test_ca_bundle_env(monkeypatch):
+    monkeypatch.setenv("WAZUH_CA_BUNDLE", "/path/to/ca.crt")
+    import importlib
+    from app.clients import wazuh_client
+    importlib.reload(wazuh_client)
+    assert wazuh_client.VERIFY_SSL == "/path/to/ca.crt"
+    monkeypatch.delenv("WAZUH_CA_BUNDLE", raising=False)
+    importlib.reload(wazuh_client)
