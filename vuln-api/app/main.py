@@ -55,6 +55,7 @@ def create_default_admin():
                 password_hash=hash_password("admin"), 
                 is_active=True,
                 is_default_password=True,
+                role="admin",
             )
             db.add(default_admin)
             db.commit()

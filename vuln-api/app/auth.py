@@ -68,3 +68,19 @@ def get_current_user_enforcing_password_change(current_user: User = Depends(get_
         )
     return current_user
 
+
+def require_role(allowed_roles: list[str]):
+    def role_dependency(current_user: User = Depends(get_current_user_enforcing_password_change)):
+        user_role = current_user.role or "admin"
+        if user_role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos suficientes para realizar esta acción"
+            )
+        return current_user
+    return role_dependency
+
+
+def require_admin(current_user: User = Depends(require_role(["admin"]))):
+    return current_user
+

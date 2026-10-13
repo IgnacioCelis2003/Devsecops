@@ -9,8 +9,8 @@ from app.crypto import encrypt
 
 #helpers
 
-def _create_user(db, username="admin", password="admin", is_active=True, is_default_password=False):
-    user = User(username=username, password_hash=hash_password(password), is_active=is_active, is_default_password=is_default_password)
+def _create_user(db, username="admin", password="admin", is_active=True, is_default_password=False, role="admin"):
+    user = User(username=username, password_hash=hash_password(password), is_active=is_active, is_default_password=is_default_password, role=role)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -109,7 +109,7 @@ def test_sync_vulnerabilities_unauthorized(client, db_session):
 @patch("app.routers.wazuh_router.fetch_all_vulns")
 def test_sync_vulnerabilities_success(mock_fetch, client, db_session):
     from app.auth import hash_password
-    test_user = User(username="admin", password_hash=hash_password("admin"), is_active=True, is_default_password=False)
+    test_user = User(username="admin", password_hash=hash_password("admin"), is_active=True, is_default_password=False, role="admin")
     db_session.add(test_user)
     conn = WazuhConnection(
         name="test", indexer_url="https://wazuh.local:9200",
@@ -555,3 +555,15 @@ def test_vuln_without_cve_id_is_skipped(mock_fetch, client, db_session):
     res = client.post(f"/wazuh-connections/{conn.id}/sync", headers=_get_headers(client))
     assert res.json()["synced"] == 0
     assert db_session.query(WazuhVulnerability).count() == 0
+
+
+def test_viewer_role_forbidden_actions(client, db_session):
+    _create_user(db_session, username="viewer_user", role="viewer")
+    headers = _get_headers(client, username="viewer_user", password="admin")
+    
+    payload = {"name": "test", "indexer_url": "https://wazuh.local:9200", "wazuh_user": "u", "wazuh_password": "p"}
+    res = client.post("/wazuh-connections", json=payload, headers=headers)
+    assert res.status_code == 403
+
+    res2 = client.post("/users", json={"username": "new", "password": "123"}, headers=headers)
+    assert res2.status_code == 403
