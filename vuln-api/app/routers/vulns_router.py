@@ -2,7 +2,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..db import get_db
 from ..models import User, WazuhConnection, WazuhVulnerability
@@ -42,18 +42,41 @@ def sync_all_connections(
 
 @router.get("")
 def list_vulns(
-    limit: Optional[int] = None,
+    offset: int = 0,
+    limit: int = 50,
     connection_id: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_enforcing_password_change),
 ):
+    dwell_time_expression = (
+        func.extract(
+            "epoch",
+            WazuhVulnerability.last_seen - WazuhVulnerability.first_seen,
+        )
+        / 86400.0
+    ).label("dwell_time_days")
+    age_expression = (
+        func.extract(
+            "epoch",
+            func.now() - WazuhVulnerability.first_seen,
+        )
+        / 86400.0
+    ).label("total_age_days")
+
     query = db.query(
         WazuhVulnerability,
-        (func.extract('epoch', WazuhVulnerability.last_seen - WazuhVulnerability.first_seen) / 86400.0).label("dwell_time_days"),
-        (func.extract('epoch', func.now() - WazuhVulnerability.first_seen) / 86400.0).label("total_age_days")
+        dwell_time_expression,
+        age_expression,
+    ).options(
+        joinedload(WazuhVulnerability.connection),
+        selectinload(WazuhVulnerability.history),
     )
-    if connection_id:
+    if connection_id is not None:
         query = query.filter(WazuhVulnerability.connection_id == connection_id)
+    query = query.order_by(
+        WazuhVulnerability.last_seen.desc(),
+        WazuhVulnerability.id.desc(),
+    ).offset(offset)
     if limit is not None:
         query = query.limit(limit)
     results = query.all()
