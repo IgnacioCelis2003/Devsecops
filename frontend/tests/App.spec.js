@@ -110,7 +110,7 @@ describe('App.vue', () => {
         expect(localStorage.getItem('username')).toBeNull()
         expect(mockPush).toHaveBeenCalledWith('/login')
     })
-    it('navigates to timeline when clicking timeline link', async () => {
+    it('does not render separate timeline link as it is unified into dashboard', () => {
     const wrapper = mount(App, {
       global: {
         stubs: ['router-view', 'router-link']
@@ -121,9 +121,7 @@ describe('App.vue', () => {
       el.text().includes('Línea de Tiempo')
     )
 
-    await timelineLink.trigger('click')
-
-    expect(mockPush).toHaveBeenCalledWith('/timeline')
+    expect(timelineLink).toBeUndefined()
   })
 
   it('navigates to config-user when clicking administrar usuarios', async () => {

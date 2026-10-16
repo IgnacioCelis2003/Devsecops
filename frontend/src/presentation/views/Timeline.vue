@@ -7,8 +7,14 @@
       </div>
     </div>
 
-    <div v-if="statusError" class="status-banner status-error">{{ statusError }}</div>
-    <div v-if="statusWarning" class="status-banner status-warning">{{ statusWarning }}</div>
+    <div v-if="statusError" class="status-banner status-error">
+      <span class="banner-icon">⚠️</span>
+      <span>{{ statusError }}</span>
+    </div>
+    <div v-if="statusWarning" class="status-banner status-warning">
+      <span class="banner-icon">⚠️</span>
+      <span>{{ statusWarning }}</span>
+    </div>
 
     <TimelineFilters
       :connections="connections"

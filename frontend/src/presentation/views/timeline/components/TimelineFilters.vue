@@ -49,6 +49,53 @@
         </div>
       </div>
 
+      <div v-if="tagOptions.length" class="f-group popover-wrap" v-click-outside="() => (dropdowns.tags = false)">
+        <label>Etiquetas</label>
+        <button class="filter-input dd-btn" @click="dropdowns.tags = !dropdowns.tags">
+          <span>{{ selectedTagsModel.length ? selectedTagsModel.length + ' sel.' : 'Todas' }}</span>
+          <span>▼</span>
+        </button>
+        <div v-if="dropdowns.tags" class="dd-panel fade-in">
+          <input type="text" v-model="search.tag" placeholder="Buscar etiqueta..." class="dd-search">
+          <div class="dd-actions">
+            <span @click="selectedTagsModel = [...tagOptions]">Todas</span>
+            <span @click="selectedTagsModel = []">Limpiar</span>
+          </div>
+          <div class="dd-list custom-scroll">
+            <label v-for="tag in filteredTags" :key="tag" class="dd-item">
+              <input type="checkbox" :value="tag" v-model="selectedTagsModel"> {{ tag }}
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="f-group">
+        <label>Estado</label>
+        <div class="chip-row">
+          <button
+            class="status-chip"
+            :class="{ on: status === 'all' }"
+            @click="emit('set-status', 'all')"
+          >
+            Todas
+          </button>
+          <button
+            class="status-chip"
+            :class="{ on: status === 'active' }"
+            @click="emit('set-status', 'active')"
+          >
+            Activas
+          </button>
+          <button
+            class="status-chip"
+            :class="{ on: status === 'resolved' }"
+            @click="emit('set-status', 'resolved')"
+          >
+            Resueltas
+          </button>
+        </div>
+      </div>
+
       <div class="f-group">
         <label>Periodo</label>
         <div class="chip-row">
@@ -85,9 +132,12 @@ const props = defineProps({
   connections: { type: Array, required: true },
   agentOptions: { type: Array, required: true },
   vulnOptions: { type: Array, required: true },
+  tagOptions: { type: Array, default: () => [] },
   selectedConnection: { type: [String, Number], default: '' },
   selectedAgents: { type: Array, required: true },
   selectedVulns: { type: Array, required: true },
+  selectedTags: { type: Array, default: () => [] },
+  status: { type: String, default: 'all' },
   period: { type: String, required: true },
   periods: { type: Array, required: true },
   customDate: { type: String, required: true },
@@ -98,9 +148,11 @@ const emit = defineEmits([
   'update:selectedConnection',
   'update:selectedAgents',
   'update:selectedVulns',
+  'update:selectedTags',
   'update:customDate',
   'connection-change',
   'set-period',
+  'set-status',
   'build'
 ])
 
@@ -119,13 +171,18 @@ const selectedVulnsModel = computed({
   set: value => emit('update:selectedVulns', value)
 })
 
+const selectedTagsModel = computed({
+  get: () => props.selectedTags,
+  set: value => emit('update:selectedTags', value)
+})
+
 const customDateModel = computed({
   get: () => props.customDate,
   set: value => emit('update:customDate', value)
 })
 
-const search = reactive({ agent: '', vuln: '' })
-const dropdowns = reactive({ agents: false, vulns: false })
+const search = reactive({ agent: '', vuln: '', tag: '' })
+const dropdowns = reactive({ agents: false, vulns: false, tags: false })
 
 const filteredAgents = computed(() =>
   props.agentOptions.filter(agent => agent.toLowerCase().includes(search.agent.toLowerCase()))
@@ -133,6 +190,10 @@ const filteredAgents = computed(() =>
 
 const filteredVulns = computed(() =>
   props.vulnOptions.filter(vuln => vuln.toLowerCase().includes(search.vuln.toLowerCase()))
+)
+
+const filteredTags = computed(() =>
+  props.tagOptions.filter(tag => tag.toLowerCase().includes(search.tag.toLowerCase()))
 )
 </script>
 
@@ -153,8 +214,8 @@ const filteredVulns = computed(() =>
 .dd-list { max-height: 220px; overflow-y: auto; }
 .dd-item { display: flex; gap: 0.6rem; padding: 0.4rem 0.9rem; font-size: 0.82rem; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.chip { padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-dark); font-size: 0.72rem; font-weight: 700; color: var(--text-muted); cursor: pointer; }
-.chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.chip, .status-chip { padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-dark); font-size: 0.72rem; font-weight: 700; color: var(--text-muted); cursor: pointer; }
+.chip.on, .status-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
 
 @media (max-width: 1100px) {
   .filter-row { grid-template-columns: 1fr 1fr; }

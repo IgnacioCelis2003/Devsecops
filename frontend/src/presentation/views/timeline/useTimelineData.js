@@ -21,6 +21,8 @@ export default function useTimelineData({
   selectedConnection,
   selectedAgents,
   selectedVulns,
+  selectedTags = ref([]),
+  selectedStatus = ref('all'),
   period,
   customDate,
   activeZoom,
@@ -28,6 +30,7 @@ export default function useTimelineData({
 }) {
   const loading = ref(false)
   const hasBuilt = ref(false)
+  const isTruncated = ref(false)
   const filteredVulnsData = ref([])
   const changeEvents = ref([])
   const latestSnap = ref({ total: 0, pending: 0, resolved: 0 })
@@ -259,7 +262,10 @@ export default function useTimelineData({
     const data = Array.isArray(response.data) ? response.data : []
 
     if (data.length >= LIMIT) {
+      isTruncated.value = true
       warningMessage.value = `Se alcanzaron ${LIMIT} registros. El analisis puede estar truncado.`
+    } else {
+      isTruncated.value = false
     }
 
     return data
@@ -268,6 +274,7 @@ export default function useTimelineData({
   const resetBuildState = () => {
     loading.value = true
     hasBuilt.value = false
+    isTruncated.value = false
     errorMessage.value = ''
     warningMessage.value = ''
     changeEvents.value = []
@@ -277,9 +284,13 @@ export default function useTimelineData({
 
   const filterVulnerabilities = (data) => {
     return data.filter(vuln => {
-      const byAgent = selectedAgents.value.length === 0 || selectedAgents.value.includes(vuln.agent_name)
-      const byVuln = selectedVulns.value.length === 0 || selectedVulns.value.includes(vuln.cve_id)
-      return byAgent && byVuln
+      const byAgent = !selectedAgents?.value?.length || selectedAgents.value.includes(vuln.agent_name)
+      const byVuln = !selectedVulns?.value?.length || selectedVulns.value.includes(vuln.cve_id)
+      const byTag = !selectedTags?.value?.length || (Array.isArray(vuln.tags) && vuln.tags.some(t => selectedTags.value.includes(t)))
+      const byStatus = !selectedStatus?.value || selectedStatus.value === 'all' ||
+        (selectedStatus.value === 'active' && vuln.status === 'ACTIVE') ||
+        (selectedStatus.value === 'resolved' && vuln.status === 'RESOLVED')
+      return byAgent && byVuln && byTag && byStatus
     })
   }
 
@@ -350,11 +361,13 @@ export default function useTimelineData({
   return {
     loading,
     hasBuilt,
+    isTruncated,
     allSlots,
     paintedCount,
     latestSnap,
     errorMessage,
     warningMessage,
+    filteredVulnsData,
     build,
     fetchConnectionVulns,
     snapshotAt

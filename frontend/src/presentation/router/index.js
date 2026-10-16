@@ -10,8 +10,8 @@ import userService from '../../application/services/userService'
 
 
 const routes = [
-  { path: '/login', name: 'Login', component: Login },
-  { path: '/', redirect: '/login' },
+  { path: '/', name: 'Login', component: Login },
+  { path: '/login', name: 'LoginRoute', component: Login },
   { path: '/dashboard', name: 'Dashboard', component: Dashboard, meta: { requiresAuth: true } },
   { path: '/timeline', name: 'Timeline', component: Timeline, meta: { requiresAuth: true } },
   { path: '/config-user', name: 'ConfigUser', component: ConfigUser, meta: { requiresAuth: true } },
@@ -46,6 +46,13 @@ router.beforeEach(async (to, from) => {
     try {
       const userMeRes = await userService.getUserMe()
       const user = userMeRes.data
+
+      if (user.username) {
+        localStorage.setItem('username', user.username)
+      }
+      if (user.role) {
+        localStorage.setItem('role', user.role)
+      }
 
       // Si sigue con contraseña por defecto, solo puede entrar a change-password
       if (user.is_default_password && to.path !== '/change-password') {
