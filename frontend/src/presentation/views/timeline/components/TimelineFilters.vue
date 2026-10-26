@@ -127,6 +127,7 @@
 
 <script setup>
 import { computed, reactive } from 'vue'
+import vClickOutside from '@/presentation/directives/clickOutside'
 
 const props = defineProps({
   connections: { type: Array, required: true },

@@ -91,6 +91,7 @@ import { computed, ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Swal from 'sweetalert2'
 import userService from './application/services/userService'
+import vClickOutside from '@/presentation/directives/clickOutside'
 
 const router = useRouter()
 const route = useRoute()
@@ -147,7 +148,6 @@ onMounted(() => {
 const currentRouteName = computed(() => {
   switch(route.name) {
     case 'Dashboard': return 'Vulnerabilidades Wazuh'
-    case 'Timeline': return 'Linea de tiempo'
     case 'ConfigUser': return 'Gestión de Usuarios'
     case 'ConfigWazuh': return 'Configuración de Wazuh'
     case 'ChangePassword': return 'Seguridad de Cuenta'
@@ -188,7 +188,9 @@ const logout = () => {
 /* App Layout */
 .app-layout {
   display: flex;
-  height: 100vh;
+  height: 100%;
+  max-height: 100vh;
+  overflow: hidden;
   background-color: var(--bg-dark);
 }
 
@@ -396,7 +398,7 @@ const logout = () => {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
 }
 

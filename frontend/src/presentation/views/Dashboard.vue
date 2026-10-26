@@ -286,15 +286,15 @@
             </caption>
             <thead>
               <tr>
-                <th style="width: 10%;" @click="sortBy('connection_name')">
-                  Conexión Wazuh
+                <th class="col-connection" @click="sortBy('connection_name')">
+                  Conexión
                   <span v-if="sortKey === 'connection_name'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
                       <path d="M7 14l5-5 5 5z"/>
                     </svg>
                   </span>
                 </th>
-                <th style="width: 11%;" @click="sortBy('severity')">
+                <th class="col-severity" @click="sortBy('severity')">
                   Severidad
                   <span v-if="sortKey === 'severity'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -302,8 +302,8 @@
                     </svg>
                   </span>
                 </th>
-                <th style="width: 8%;" @click="sortBy('score_base')">
-                  Score CVSS
+                <th class="col-score" @click="sortBy('score_base')">
+                  CVSS
                   <span v-if="sortKey === 'score_base'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
                       <path d="M7 14l5-5 5 5z"/>
@@ -334,7 +334,7 @@
                     </svg>
                   </span>
                 </th>
-                <th style="width: 8%;" @click="sortBy('dwell_time_days')">
+                <th class="col-dwell" @click="sortBy('dwell_time_days')">
                   Días Activa
                   <span v-if="sortKey === 'dwell_time_days'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -342,8 +342,8 @@
                     </svg>
                   </span>
                 </th>
-                <th style="width: 8%;" @click="sortBy('total_age_days')">
-                  Tiempo Total (Días)
+                <th class="col-age" @click="sortBy('total_age_days')">
+                  Tiempo Total
                   <span v-if="sortKey === 'total_age_days'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
                       <path d="M7 14l5-5 5 5z"/>
@@ -362,38 +362,38 @@
             </thead>
             <tbody>
               <tr v-for="vuln in paginatedVulns" :key="vuln.id">
-                <td>{{ vuln.connection_name || '-' }}</td>
+                <td :title="vuln.connection_name" class="cell-truncate">{{ vuln.connection_name || '-' }}</td>
                 <td>
                   <span :class="getSeverityClass(vuln.severity)">
                     {{ (vuln.severity || 'UNKNOWN').toUpperCase() }}
                   </span>
                 </td>
-                <td class="font-medium score-cell">
+                <td class="font-medium score-cell text-center">
                   {{ vuln.score_base != null ? vuln.score_base.toFixed(1) : 'N/A' }}
                 </td>
                 <td class="font-medium text-black">
                   <code>{{ vuln.cve_id || 'N/A' }}</code>
                 </td>
                 <td>
-                  <div class="agent-info">
+                  <div class="agent-info" :title="vuln.agent_name || vuln.agent_id">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
-                    <span>{{ vuln.agent_name || vuln.agent_id || 'N/A' }}</span>
+                    <span class="cell-truncate">{{ vuln.agent_name || vuln.agent_id || 'N/A' }}</span>
                   </div>
                   <div v-if="vuln.tags?.length" class="tag-list" aria-label="Etiquetas Wazuh">
                     <span v-for="tag in vuln.tags" :key="tag" class="badge-mini">{{ tag }}</span>
                   </div>
                 </td>
                 <td>
-                  <div class="package-info">
-                    <span class="pkg-name">{{ vuln.package_name }}</span>
-                    <span class="pkg-version">v{{ vuln.package_version }}</span>
+                  <div class="package-info" :title="vuln.package_name + ' ' + (vuln.package_version || '')">
+                    <span class="pkg-name cell-truncate">{{ vuln.package_name }}</span>
+                    <span class="pkg-version cell-truncate">v{{ vuln.package_version }}</span>
                   </div>
                 </td>
                 <td class="font-medium text-center">
-                  {{ vuln.dwell_time_days !== undefined && vuln.dwell_time_days !== null ? vuln.dwell_time_days.toFixed(2) : '-' }}
+                  {{ vuln.dwell_time_days !== undefined && vuln.dwell_time_days !== null ? vuln.dwell_time_days.toFixed(1) : '-' }}
                 </td>
                 <td class="font-medium text-center">
-                  {{ vuln.total_age_days !== undefined && vuln.total_age_days !== null ? vuln.total_age_days.toFixed(2) : '-' }}
+                  {{ vuln.total_age_days !== undefined && vuln.total_age_days !== null ? vuln.total_age_days.toFixed(1) : '-' }}
                 </td>
                 <td>
                   <div class="visual-timeline">
@@ -527,6 +527,7 @@
 import { ref, onMounted, computed, watch, reactive } from 'vue'
 import vulnService from '../../application/services/vulnService'
 import wazuhService from '../../application/services/wazuhService'
+import vClickOutside from '@/presentation/directives/clickOutside'
 import TimelineFilters from './timeline/components/TimelineFilters.vue'
 import TimelineKpiStrip from './timeline/components/TimelineKpiStrip.vue'
 import TimelineCanvas from './timeline/components/TimelineCanvas.vue'
@@ -1371,9 +1372,9 @@ onMounted(() => {
 .visual-timeline {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem 0;
-  min-width: 180px;
+  gap: 0.35rem;
+  padding: 0.25rem 0;
+  min-width: 110px;
 }
 
 .timeline-point {
@@ -1472,11 +1473,34 @@ th {
   transition: transform 0.2s ease;
 }
 
-.vuln-table .col-severity { width: 12%; }
-.vuln-table .col-cve { width: 15%; }
-.vuln-table .col-agent { width: 15%; }
-.vuln-table .col-package { width: 28%; }
-.vuln-table .col-timeline { width: 20%; }
+.vuln-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.vuln-table th,
+.vuln-table td {
+  padding: 0.8rem 0.65rem;
+  font-size: 0.84rem;
+  vertical-align: middle;
+}
+
+.vuln-table .col-connection { width: 9%; }
+.vuln-table .col-severity { width: 10%; }
+.vuln-table .col-score { width: 6%; text-align: center; }
+.vuln-table .col-cve { width: 12%; }
+.vuln-table .col-agent { width: 12%; }
+.vuln-table .col-package { width: 20%; }
+.vuln-table .col-dwell { width: 7%; text-align: center; }
+.vuln-table .col-age { width: 7%; text-align: center; }
+.vuln-table .col-timeline { width: 17%; }
+
+.cell-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .visually-hidden {
   position: absolute;
