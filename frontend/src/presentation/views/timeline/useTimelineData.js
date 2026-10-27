@@ -17,6 +17,27 @@ const initialZoomForPeriod = period => {
   return 0
 }
 
+
+const isResolvedAction = (h) => {
+  if (!h) return false
+  const action = (h.action || '').toUpperCase()
+  const details = (h.details || '').toUpperCase()
+  if (action === 'RESOLVED') return true
+  if (action === 'STATUS_CHANGED' && (details.includes('RESOLVED') || details.includes('MITIGATED') || details.includes('RESUELT'))) {
+    return true
+  }
+  return false
+}
+
+const isReopenedOrActiveAction = (h) => {
+  if (!h) return false
+  const action = (h.action || '').toUpperCase()
+  const details = (h.details || '').toUpperCase()
+  if (action === 'REOPENED' || action === 'DETECTED') return true
+  if (action === 'STATUS_CHANGED' && details.includes('ACTIVE')) return true
+  return false
+}
+
 export default function useTimelineData({
   selectedConnection,
   selectedAgents,
@@ -94,12 +115,21 @@ export default function useTimelineData({
     for (const historyItem of vuln.historySorted) {
       const historyMs = new Date(historyItem.timestamp).getTime()
       if (Number.isNaN(historyMs) || historyMs > ms) break
-      if (historyItem.action === 'RESOLVED') {
+      if (isResolvedAction(historyItem)) {
         state = 'RESOLVED'
         resolvedAt = historyItem.timestamp
-      } else {
+      } else if (isReopenedOrActiveAction(historyItem)) {
         state = 'ACTIVE'
         resolvedAt = null
+      }
+    }
+
+    // Si en BD ya figura como resuelta/mitigada y la fecha del slot es posterior a su última actividad
+    if (state === 'ACTIVE' && (vuln.status === 'RESOLVED' || vuln.status === 'MITIGATED') && !resolvedAt) {
+      const lastSeenMs = new Date(vuln.last_seen || vuln.first_seen).getTime()
+      if (!Number.isNaN(lastSeenMs) && ms >= lastSeenMs) {
+        state = 'RESOLVED'
+        resolvedAt = vuln.last_seen
       }
     }
 
@@ -115,9 +145,13 @@ export default function useTimelineData({
 
       details.push({
         ...vuln,
-        status: vulnState.state,
+        // Estado histórico en el slot específico
+        slot_status: vulnState.state,
+        // Estado actual definitivo en base de datos
+        current_status: vuln.status || vulnState.state,
+        status: vulnState.state, // para contadores del slot
         resolved_at: vulnState.resolvedAt,
-        connection_name: vulnState.connection_name || getConnectionName()
+        connection_name: vuln.connection_name || getConnectionName()
       })
     })
 
@@ -162,10 +196,18 @@ export default function useTimelineData({
       const historyMs = new Date(historyItem.timestamp).getTime()
       if (Number.isNaN(historyMs) || historyMs < startMs || historyMs > endMs) continue
 
-      if (['DETECTED', 'REOPENED', 'RESOLVED'].includes(historyItem.action)) {
+      if (['DETECTED', 'REOPENED', 'RESOLVED', 'STATUS_CHANGED'].includes(historyItem.action)) {
+        let label = historyItem.action
+        if (isResolvedAction(historyItem)) {
+          label = 'RESOLVED'
+        } else if (historyItem.action === 'STATUS_CHANGED') {
+          if (historyItem.details?.toUpperCase().includes('MITIGATED')) label = 'MITIGATED'
+          else if (historyItem.details?.toUpperCase().includes('IN_REVIEW')) label = 'IN_REVIEW'
+          else label = 'STATUS_CHANGED'
+        }
         candidates.push({
           at: historyItem.timestamp,
-          label: historyItem.action,
+          label: label,
           source: 'history'
         })
       }
@@ -315,7 +357,7 @@ export default function useTimelineData({
       vuln.historySorted.forEach(historyItem => {
         const historyMs = new Date(historyItem.timestamp).getTime()
         if (historyMs < rangeStartMs.value || historyMs > rangeEndMs.value) return
-        if (historyItem.action === 'RESOLVED') {
+        if (isResolvedAction(historyItem)) {
           events.push({ ms: historyMs, kind: 'resolution' })
         }
       })

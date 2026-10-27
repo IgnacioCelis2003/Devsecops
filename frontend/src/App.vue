@@ -28,7 +28,7 @@
 
         <a v-if="isAdmin" href="#" @click.prevent="handleNavClick('/config-wazuh')" class="nav-item" :class="{ 'router-link-active': route.path === '/config-wazuh' }">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          Administar conexiones Wazuh
+          Administrar conexiones Wazuh
         </a>
       </nav>
 
@@ -51,8 +51,13 @@
         
         <div class="header-user popover-wrap" v-click-outside="() => (userMenuOpen = false)">
           <div class="user-info" @click="userMenuOpen = !userMenuOpen" style="cursor: pointer;" title="Opciones de usuario">
-            <span class="user-greeting">Hola,</span>
-            <span class="user-name">{{ username }} ▾</span>
+            <div class="user-info-text">
+              <span class="user-greeting">Hola,</span>
+              <span class="user-name">{{ username }} ▾</span>
+            </div>
+            <span class="badge-header-role" :class="isAdmin ? 'role-admin' : 'role-viewer'">
+              {{ isAdmin ? 'Administrador' : 'Visualizador' }}
+            </span>
           </div>
           <div class="avatar" @click="userMenuOpen = !userMenuOpen" style="cursor: pointer;" title="Opciones de usuario">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
@@ -101,7 +106,7 @@ const userRole = ref(localStorage.getItem('role') || 'admin')
 const userMenuOpen = ref(false)
 
 const isAdmin = computed(() => {
-  const current = userRole.value || localStorage.getItem('role') || 'admin'
+  const current = userRole.value || localStorage.getItem('role') || 'viewer'
   return current === 'admin'
 })
 
@@ -294,6 +299,9 @@ const logout = () => {
 /* Sidebar */
 .sidebar {
   width: 280px;
+  min-width: 280px;
+  max-width: 280px;
+  flex: 0 0 280px;
   background-color: var(--bg-panel);
   border-right: 1px solid var(--border);
   display: flex;
@@ -395,7 +403,8 @@ const logout = () => {
 
 /* Main Content Wrapper */
 .main-wrapper {
-  flex-grow: 1;
+  flex: 1 1 0%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -429,7 +438,25 @@ const logout = () => {
 .user-info {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
   text-align: right;
+}
+
+.user-info-text {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.badge-header-role {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
 }
 
 .user-greeting {
@@ -460,5 +487,6 @@ const logout = () => {
   flex-grow: 1;
   overflow-y: auto;
   padding: 2.5rem;
+  scrollbar-gutter: stable;
 }
 </style>

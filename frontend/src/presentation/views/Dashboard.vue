@@ -42,16 +42,18 @@
         <span class="section-hint">Filtra por etiquetas, periodo temporal y estado para analizar la evolución</span>
       </div>
 
-      <!-- Timeline Filter Controls -->
+      <!-- Timeline Filter Controls (FILTRO GLOBAL UNIFICADO) -->
       <TimelineFilters
         :connections="connections"
         :agent-options="agentOptions"
         :vuln-options="vulnOptions"
         :tag-options="tagOptions"
+        :severity-options="severityOptions"
         :selected-connection="selectedConnection"
         :selected-agents="selectedAgents"
         :selected-vulns="selectedVulns"
         :selected-tags="selectedTags"
+        :selected-severities="selectedSeverities"
         :status="selectedStatus"
         :period="period"
         :periods="periods"
@@ -61,6 +63,7 @@
         @update:selected-agents="selectedAgents = $event"
         @update:selected-vulns="selectedVulns = $event"
         @update:selected-tags="selectedTags = $event"
+        @update:selected-severities="selectedSeverities = $event"
         @update:custom-date="customDate = $event"
         @set-status="setStatusFilter"
         @set-period="setPeriodFilter"
@@ -114,122 +117,91 @@
           <span class="count-pill">{{ sortedVulns.length }} CVEs filtrados</span>
         </div>
 
-        <!-- Filter Toggle Bar (minimalista) -->
-        <div class="filter-actions-right">
-          <button class="btn-filter-toggle" @click="showFilters = !showFilters">
+        <!-- Selector de Columnas Visibles (Top Right) -->
+        <div class="col-picker-container" v-click-outside="closeColumnPicker">
+          <button
+            type="button"
+            class="btn-col-picker"
+            :class="{ 'btn-col-picker-active': showColumnPicker }"
+            @click="toggleColumnPicker"
+            title="Personalizar columnas visibles de la tabla"
+          >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="9" y1="3" x2="9" y2="21"></line>
+              <line x1="15" y1="3" x2="15" y2="21"></line>
             </svg>
-            <span>{{ showFilters ? 'Ocultar filtros avanzados' : 'Filtros avanzados' }}</span>
-          </button>
-          <button v-if="showFilters" class="btn-clear-filters" @click="clearFilters">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 6h18"></path>
-              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+            <span class="btn-picker-text">Columnas</span>
+            <span class="col-counter-pill">{{ visibleColumnIds.length }}/{{ AVAILABLE_COLUMNS.length }}</span>
+            <svg class="chevron-arrow" :class="{ 'rotate-180': showColumnPicker }" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
-            <span>Limpiar</span>
           </button>
-        </div>
-      </div>
 
-      <!-- Advanced Filters Panel -->
-      <div v-show="showFilters" class="card filter-panel">
-        <div class="filter-row">
-          <div class="f-group">
-            <label>Conexión Wazuh</label>
-            <select v-model="selectedConnection" @change="onConnectionChange" class="filter-input">
-              <option value="">Todas las conexiones</option>
-              <option v-for="conn in connections" :key="conn.id" :value="conn.id">{{ conn.name }}</option>
-            </select>
-          </div>
-
-          <div class="f-group popover-wrap" v-click-outside="() => (dropdowns.agents = false)">
-            <label>Agentes</label>
-            <button class="filter-input dd-btn" @click="dropdowns.agents = !dropdowns.agents" :disabled="!agentOptions.length">
-              <span>{{ selectedAgents.length ? selectedAgents.length + ' sel.' : 'Todos' }}</span>
-              <span>▼</span>
-            </button>
-            <div v-if="dropdowns.agents" class="dd-panel fade-in">
-              <input type="text" v-model="search.agent" placeholder="Buscar agente..." class="dd-search">
-              <div class="dd-actions">
-                <span @click="selectedAgents = [...agentOptions]">Todos</span>
-                <span @click="selectedAgents = []">Limpiar</span>
+          <!-- Popover desplegable estilo chips/pills -->
+          <div v-if="showColumnPicker" class="col-picker-popover shadow-md fade-in">
+            <div class="col-picker-header">
+              <div class="cp-header-text">
+                <div class="cp-title-row">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.2">
+                    <path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/>
+                  </svg>
+                  <span class="cp-title">Selector de Columnas</span>
+                </div>
+                <span class="cp-subtitle">Selecciona los campos para mostrar u ocultar</span>
               </div>
-              <div class="dd-list custom-scroll">
-                <label v-for="agent in filteredAgents" :key="agent" class="dd-item">
-                  <input type="checkbox" :value="agent" v-model="selectedAgents"> {{ agent }}
-                </label>
+              <button
+                type="button"
+                class="btn-reset-columns"
+                @click="resetColumnsToDefault"
+                title="Restablecer columnas por defecto"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="1 4 1 10 7 10"></polyline>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
+                Restablecer
+              </button>
+            </div>
+
+            <div class="col-picker-content">
+              <div class="pill-chips-container">
+                <button
+                  v-for="col in AVAILABLE_COLUMNS"
+                  :key="col.id"
+                  type="button"
+                  class="pill-chip-btn"
+                  :class="{
+                    'is-active': isColVisible(col.id),
+                    'is-locked': col.locked
+                  }"
+                  :disabled="col.locked"
+                  @click="toggleColumn(col.id)"
+                  :title="col.locked ? 'Esta columna es obligatoria y siempre permanece visible' : `Alternar visibilidad de ${col.label}`"
+                >
+                  <span class="pill-round-checkbox">
+                    <svg v-if="col.locked" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <svg v-else-if="isColVisible(col.id)" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  </span>
+                  <span class="pill-chip-text">{{ col.label }}</span>
+                  <span v-if="col.locked" class="pill-locked-tag">Fija</span>
+                </button>
               </div>
             </div>
-          </div>
 
-          <div class="f-group popover-wrap" v-click-outside="() => (dropdowns.vulns = false)">
-            <label>CVE ID</label>
-            <button class="filter-input dd-btn" @click="dropdowns.vulns = !dropdowns.vulns" :disabled="!vulnOptions.length">
-              <span>{{ selectedVulns.length ? selectedVulns.length + ' sel.' : 'Todas' }}</span>
-              <span>▼</span>
-            </button>
-            <div v-if="dropdowns.vulns" class="dd-panel fade-in">
-              <input type="text" v-model="search.vuln" placeholder="Buscar CVE..." class="dd-search">
-              <div class="dd-actions">
-                <span @click="selectedVulns = [...vulnOptions]">Todas</span>
-                <span @click="selectedVulns = []">Limpiar</span>
-              </div>
-              <div class="dd-list custom-scroll">
-                <label v-for="vuln in filteredCVEOptions" :key="vuln" class="dd-item">
-                  <input type="checkbox" :value="vuln" v-model="selectedVulns"> {{ vuln }}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="f-group popover-wrap" v-click-outside="() => (dropdowns.packages = false)">
-            <label>Software Afectado</label>
-            <button class="filter-input dd-btn" @click="dropdowns.packages = !dropdowns.packages" :disabled="!packageOptions.length">
-              <span>{{ selectedPackages.length ? selectedPackages.length + ' sel.' : 'Todos' }}</span>
-              <span>▼</span>
-            </button>
-            <div v-if="dropdowns.packages" class="dd-panel fade-in">
-              <input type="text" v-model="search.package" placeholder="Buscar software..." class="dd-search">
-              <div class="dd-actions">
-                <span @click="selectedPackages = [...packageOptions]">Todos</span>
-                <span @click="selectedPackages = []">Limpiar</span>
-              </div>
-              <div class="dd-list custom-scroll">
-                <label v-for="pkg in filteredPackages" :key="pkg" class="dd-item">
-                  <input type="checkbox" :value="pkg" v-model="selectedPackages"> {{ pkg }}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="f-group popover-wrap" v-click-outside="() => (dropdowns.severity = false)">
-            <label>Severidad</label>
-            <button class="filter-input dd-btn" @click="dropdowns.severity = !dropdowns.severity" :disabled="!severityOptions.length">
-              <span>{{ selectedSeverities.length ? selectedSeverities.length + ' sel.' : 'Todas' }}</span>
-              <span>▼</span>
-            </button>
-            <div v-if="dropdowns.severity" class="dd-panel fade-in">
-              <div class="dd-actions">
-                <span @click="selectedSeverities = [...severityOptions]">Todas</span>
-                <span @click="selectedSeverities = []">Limpiar</span>
-              </div>
-              <div class="dd-list custom-scroll">
-                <label v-for="sev in severityOptions" :key="sev" class="dd-item">
-                  <input type="checkbox" :value="sev" v-model="selectedSeverities"> 
-                  <span :class="'badge-mini ' + getSeverityBadgeClass(sev)">{{ sev }}</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="f-group">
-            <label>Score CVSS (Base)</label>
-            <div class="range-inputs">
-              <input type="number" v-model.number="scoreMin" min="0" max="10" step="0.1" placeholder="Min" class="filter-input-sm">
-              <span>-</span>
-              <input type="number" v-model.number="scoreMax" min="0" max="10" step="0.1" placeholder="Max" class="filter-input-sm">
+            <div class="col-picker-footer">
+              <span class="cp-footer-note">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                <span><strong>Columnas fijas requeridas:</strong> Conexión, Severidad, CVSS y CVE ID.</span>
+              </span>
             </div>
           </div>
         </div>
@@ -246,8 +218,8 @@
       <!-- Table Container -->
       <div v-else class="card" style="padding: 0;">
         <div class="table-wrapper">
-          <!-- Top Pagination & Controls Bar -->
-          <div class="table-controls-bar">
+          <!-- Top Pagination & Controls Bar (Solo cuando hay registros) -->
+          <div v-if="sortedVulns.length > 0" class="table-controls-bar">
             <div class="controls-left">
               <label class="per-page-selector">
                 <span class="label-text">Mostrar</span>
@@ -280,13 +252,14 @@
           </div>
 
           <!-- The Table -->
-          <table v-if="vulns.length > 0" class="vuln-table">
+          <table v-if="sortedVulns.length > 0" class="vuln-table">
             <caption class="visually-hidden">
               Tabla de vulnerabilidades con severidad, CVE, agente, software afectado y linea de tiempo de actividad.
             </caption>
             <thead>
               <tr>
-                <th class="col-connection" @click="sortBy('connection_name')">
+                <!-- 1. Conexión (Fija / Obligatoria) -->
+                <th v-if="isColVisible('connection_name')" class="col-connection" @click="sortBy('connection_name')">
                   Conexión
                   <span v-if="sortKey === 'connection_name'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -294,7 +267,9 @@
                     </svg>
                   </span>
                 </th>
-                <th class="col-severity" @click="sortBy('severity')">
+
+                <!-- 2. Severidad (Fija / Obligatoria) -->
+                <th v-if="isColVisible('severity')" class="col-severity" @click="sortBy('severity')">
                   Severidad
                   <span v-if="sortKey === 'severity'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -302,7 +277,9 @@
                     </svg>
                   </span>
                 </th>
-                <th class="col-score" @click="sortBy('score_base')">
+
+                <!-- 3. CVSS (Fija / Obligatoria) -->
+                <th v-if="isColVisible('score_base')" class="col-score" @click="sortBy('score_base')">
                   CVSS
                   <span v-if="sortKey === 'score_base'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -310,7 +287,9 @@
                     </svg>
                   </span>
                 </th>
-                <th class="col-cve" @click="sortBy('cve_id')">
+
+                <!-- 4. CVE ID (Fija / Obligatoria) -->
+                <th v-if="isColVisible('cve_id')" class="col-cve" @click="sortBy('cve_id')">
                   CVE ID
                   <span v-if="sortKey === 'cve_id'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -318,15 +297,49 @@
                     </svg>
                   </span>
                 </th>
-                <th class="col-agent" @click="sortBy('agent_name')">
-                  Agente
+
+                <!-- 5. Estado (Opcional Wazuh) -->
+                <th v-if="isColVisible('status')" class="col-status" @click="sortBy('status')">
+                  Estado
+                  <span v-if="sortKey === 'status'" class="sort-indicator">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
+                      <path d="M7 14l5-5 5 5z"/>
+                    </svg>
+                  </span>
+                </th>
+
+                <!-- 6. Agente / Equipo (Default activo) -->
+                <th v-if="isColVisible('agent_name')" class="col-agent" @click="sortBy('agent_name')">
+                  Agente / Equipo
                   <span v-if="sortKey === 'agent_name'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
                       <path d="M7 14l5-5 5 5z"/>
                     </svg>
                   </span>
                 </th>
-                <th class="col-package" @click="sortBy('package_name')">
+
+                <!-- 7. ID Agente (Opcional Wazuh) -->
+                <th v-if="isColVisible('agent_id')" class="col-agent-id" @click="sortBy('agent_id')">
+                  ID Agente
+                  <span v-if="sortKey === 'agent_id'" class="sort-indicator">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
+                      <path d="M7 14l5-5 5 5z"/>
+                    </svg>
+                  </span>
+                </th>
+
+                <!-- 8. Sistema Operativo (Opcional Wazuh) -->
+                <th v-if="isColVisible('os')" class="col-os" @click="sortBy('os_full')">
+                  Sistema Operativo
+                  <span v-if="sortKey === 'os_full'" class="sort-indicator">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
+                      <path d="M7 14l5-5 5 5z"/>
+                    </svg>
+                  </span>
+                </th>
+
+                <!-- 9. Software Afectado (Default activo) -->
+                <th v-if="isColVisible('package_name')" class="col-package" @click="sortBy('package_name')">
                   Software Afectado
                   <span v-if="sortKey === 'package_name'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -334,7 +347,19 @@
                     </svg>
                   </span>
                 </th>
-                <th class="col-dwell" @click="sortBy('dwell_time_days')">
+
+                <!-- 10. Arquitectura / Tipo (Opcional Wazuh) -->
+                <th v-if="isColVisible('package_arch')" class="col-arch" @click="sortBy('package_arch')">
+                  Arquitectura / Tipo
+                  <span v-if="sortKey === 'package_arch'" class="sort-indicator">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
+                      <path d="M7 14l5-5 5 5z"/>
+                    </svg>
+                  </span>
+                </th>
+
+                <!-- 11. Días Activa (Default activo) -->
+                <th v-if="isColVisible('dwell_time_days')" class="col-dwell" @click="sortBy('dwell_time_days')">
                   Días Activa
                   <span v-if="sortKey === 'dwell_time_days'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -342,7 +367,9 @@
                     </svg>
                   </span>
                 </th>
-                <th class="col-age" @click="sortBy('total_age_days')">
+
+                <!-- 12. Tiempo Total (Default activo) -->
+                <th v-if="isColVisible('total_age_days')" class="col-age" @click="sortBy('total_age_days')">
                   Tiempo Total
                   <span v-if="sortKey === 'total_age_days'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -350,7 +377,49 @@
                     </svg>
                   </span>
                 </th>
-                <th class="col-timeline" @click="sortBy('last_seen')">
+
+                <!-- 13. Fecha Detección (Opcional Wazuh) -->
+                <th v-if="isColVisible('detected_at')" class="col-detected" @click="sortBy('detected_at')">
+                  Fecha Detección
+                  <span v-if="sortKey === 'detected_at'" class="sort-indicator">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
+                      <path d="M7 14l5-5 5 5z"/>
+                    </svg>
+                  </span>
+                </th>
+
+                <!-- 14. Fecha NVD (Opcional Wazuh) -->
+                <th v-if="isColVisible('published_at')" class="col-published" @click="sortBy('published_at')">
+                  Fecha NVD
+                  <span v-if="sortKey === 'published_at'" class="sort-indicator">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
+                      <path d="M7 14l5-5 5 5z"/>
+                    </svg>
+                  </span>
+                </th>
+
+                <!-- 15. Scanner / Proveedor (Opcional Wazuh) -->
+                <th v-if="isColVisible('scanner_vendor')" class="col-vendor" @click="sortBy('scanner_vendor')">
+                  Scanner / Proveedor
+                  <span v-if="sortKey === 'scanner_vendor'" class="sort-indicator">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
+                      <path d="M7 14l5-5 5 5z"/>
+                    </svg>
+                  </span>
+                </th>
+
+                <!-- 16. Etiquetas (Opcional Wazuh) -->
+                <th v-if="isColVisible('tags')" class="col-tags" @click="sortBy('tags')">
+                  Etiquetas
+                  <span v-if="sortKey === 'tags'" class="sort-indicator">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
+                      <path d="M7 14l5-5 5 5z"/>
+                    </svg>
+                  </span>
+                </th>
+
+                <!-- 17. Línea de Tiempo (Default activo) -->
+                <th v-if="isColVisible('timeline')" class="col-timeline" @click="sortBy('last_seen')">
                   Línea de Tiempo
                   <span v-if="sortKey === 'last_seen'" class="sort-indicator">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" :class="sortOrder === 'asc' ? '' : 'rotate-180'">
@@ -362,40 +431,108 @@
             </thead>
             <tbody>
               <tr v-for="vuln in paginatedVulns" :key="vuln.id">
-                <td :title="vuln.connection_name" class="cell-truncate">{{ vuln.connection_name || '-' }}</td>
-                <td>
+                <!-- 1. Conexión -->
+                <td v-if="isColVisible('connection_name')" :title="vuln.connection_name" class="cell-truncate">
+                  {{ vuln.connection_name || '-' }}
+                </td>
+
+                <!-- 2. Severidad -->
+                <td v-if="isColVisible('severity')">
                   <span :class="getSeverityClass(vuln.severity)">
                     {{ (vuln.severity || 'UNKNOWN').toUpperCase() }}
                   </span>
                 </td>
-                <td class="font-medium score-cell text-center">
+
+                <!-- 3. CVSS -->
+                <td v-if="isColVisible('score_base')" class="font-medium score-cell text-center">
                   {{ vuln.score_base != null ? vuln.score_base.toFixed(1) : 'N/A' }}
                 </td>
-                <td class="font-medium text-black">
+
+                <!-- 4. CVE ID -->
+                <td v-if="isColVisible('cve_id')" class="font-medium text-black">
                   <code>{{ vuln.cve_id || 'N/A' }}</code>
                 </td>
-                <td>
+
+                <!-- 5. Estado -->
+                <td v-if="isColVisible('status')" class="text-center">
+                  <span
+                    class="badge-status-pill"
+                    :class="getStatusBadgeClass(vuln.status)"
+                  >
+                    {{ (vuln.status || 'ACTIVE').toUpperCase() }}
+                  </span>
+                </td>
+
+                <!-- 6. Agente / Equipo -->
+                <td v-if="isColVisible('agent_name')">
                   <div class="agent-info" :title="vuln.agent_name || vuln.agent_id">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
                     <span class="cell-truncate">{{ vuln.agent_name || vuln.agent_id || 'N/A' }}</span>
                   </div>
-                  <div v-if="vuln.tags?.length" class="tag-list" aria-label="Etiquetas Wazuh">
+                  <div v-if="!isColVisible('tags') && vuln.tags?.length" class="tag-list" aria-label="Etiquetas Wazuh">
                     <span v-for="tag in vuln.tags" :key="tag" class="badge-mini">{{ tag }}</span>
                   </div>
                 </td>
-                <td>
+
+                <!-- 7. ID Agente -->
+                <td v-if="isColVisible('agent_id')" class="text-center">
+                  <code class="agent-id-code">{{ vuln.agent_id || '-' }}</code>
+                </td>
+
+                <!-- 8. Sistema Operativo -->
+                <td v-if="isColVisible('os')" :title="vuln.os_full || vuln.os_platform || '-'" class="cell-truncate">
+                  {{ vuln.os_full || vuln.os_platform || '-' }}
+                </td>
+
+                <!-- 9. Software Afectado -->
+                <td v-if="isColVisible('package_name')">
                   <div class="package-info" :title="vuln.package_name + ' ' + (vuln.package_version || '')">
                     <span class="pkg-name cell-truncate">{{ vuln.package_name }}</span>
                     <span class="pkg-version cell-truncate">v{{ vuln.package_version }}</span>
                   </div>
                 </td>
-                <td class="font-medium text-center">
+
+                <!-- 10. Arquitectura / Tipo -->
+                <td v-if="isColVisible('package_arch')" class="cell-truncate" :title="`${vuln.package_arch || '-'} (${vuln.package_type || '-'})`">
+                  <span>{{ vuln.package_arch || '-' }}</span>
+                  <span v-if="vuln.package_type" class="text-muted" style="font-size: 0.75rem;"> ({{ vuln.package_type }})</span>
+                </td>
+
+                <!-- 11. Días Activa -->
+                <td v-if="isColVisible('dwell_time_days')" class="font-medium text-center">
                   {{ vuln.dwell_time_days !== undefined && vuln.dwell_time_days !== null ? vuln.dwell_time_days.toFixed(1) : '-' }}
                 </td>
-                <td class="font-medium text-center">
+
+                <!-- 12. Tiempo Total -->
+                <td v-if="isColVisible('total_age_days')" class="font-medium text-center">
                   {{ vuln.total_age_days !== undefined && vuln.total_age_days !== null ? vuln.total_age_days.toFixed(1) : '-' }}
                 </td>
-                <td>
+
+                <!-- 13. Fecha Detección -->
+                <td v-if="isColVisible('detected_at')" class="text-muted cell-truncate" :title="formatDate(vuln.detected_at || vuln.first_seen)">
+                  {{ formatDate(vuln.detected_at || vuln.first_seen) }}
+                </td>
+
+                <!-- 14. Fecha NVD -->
+                <td v-if="isColVisible('published_at')" class="text-muted cell-truncate" :title="vuln.published_at ? formatDate(vuln.published_at) : 'Sin fecha publicada NVD'">
+                  {{ vuln.published_at ? formatDate(vuln.published_at) : 'N/D' }}
+                </td>
+
+                <!-- 15. Scanner / Proveedor -->
+                <td v-if="isColVisible('scanner_vendor')" class="cell-truncate" :title="vuln.scanner_vendor || 'Wazuh'">
+                  {{ vuln.scanner_vendor || 'Wazuh' }}
+                </td>
+
+                <!-- 16. Etiquetas (Tags) -->
+                <td v-if="isColVisible('tags')">
+                  <div v-if="vuln.tags?.length" class="tag-list" aria-label="Etiquetas Wazuh">
+                    <span v-for="tag in vuln.tags" :key="tag" class="badge-mini">{{ tag }}</span>
+                  </div>
+                  <span v-else class="text-muted">-</span>
+                </td>
+
+                <!-- 17. Línea de Tiempo -->
+                <td v-if="isColVisible('timeline')">
                   <div class="visual-timeline">
                     <!-- Punto de Detección -->
                     <div class="timeline-point start">
@@ -435,9 +572,9 @@
           </table>
 
           <!-- ================================================================ -->
-          <!-- Paginación Completa Abajo (Selector por página + Navegación)       -->
+          <!-- Paginación Completa Abajo (Solo cuando existen registros)          -->
           <!-- ================================================================ -->
-          <div class="pagination-footer-unified">
+          <div v-if="sortedVulns.length > 0" class="pagination-footer-unified">
             <div class="footer-left">
               <label class="per-page-selector">
                 <span class="label-text">Mostrar</span>
@@ -495,20 +632,18 @@
             </div>
           </div>
 
-          <!-- Empty State (No records found or demo instructions) -->
-          <div v-if="vulns.length === 0 && !loading" class="empty-state" style="padding: 4rem 2rem;">
-            <div class="shield-box">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path></svg>
+          <!-- Empty State (Cuando NO hay registros) -->
+          <div v-else-if="!loading" class="empty-state" style="padding: 4.5rem 2rem;">
+            <div class="shield-box" style="margin-bottom: 1.25rem;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="8" y1="12" x2="16" y2="12"></line>
+              </svg>
             </div>
-            <p style="color: var(--text-main); font-weight: 600; font-size: 1.15rem; margin-bottom: 0.5rem;">No se encontraron vulnerabilidades</p>
-            <p style="color: var(--text-muted); font-size: 0.9rem; max-width: 500px; margin: 0 auto 1.25rem;">
-              No hay vulnerabilidades registradas para los filtros aplicados.
+            <p style="color: var(--text-main); font-weight: 600; font-size: 1.2rem; margin-bottom: 0.5rem;">No hay datos disponibles que mostrar</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem; max-width: 480px; margin: 0 auto;">
+              No se encontraron vulnerabilidades registradas para la conexión o los filtros seleccionados.
             </p>
-            <div class="demo-data-card" v-if="!connections.length">
-              <span class="demo-badge">Modo de Demostración Local</span>
-              <p>Para cargar el dataset de prueba Wazuh en tu entorno local, ejecuta:</p>
-              <code>python vuln-api/app/load-data.py --replace</code>
-            </div>
           </div>
         </div>
       </div>
@@ -525,6 +660,7 @@
 
 <script setup>
 import { ref, onMounted, computed, watch, reactive } from 'vue'
+import Swal from 'sweetalert2'
 import vulnService from '../../application/services/vulnService'
 import wazuhService from '../../application/services/wazuhService'
 import vClickOutside from '@/presentation/directives/clickOutside'
@@ -540,13 +676,99 @@ import { fmtYear } from './timeline/timelineFormatters'
 // Roles y Permisos
 // ============================================================================
 const isAdmin = computed(() => {
-  const current = localStorage.getItem('role') || 'admin'
+  const current = localStorage.getItem('role') || 'viewer'
   return current === 'admin'
 })
 
 // ============================================================================
 // Estado General de Vulnerabilidades (Tabla)
 // ============================================================================
+// ============================================================================
+// Configuración de Columnas Visibles (Selector de Columnas)
+// ============================================================================
+const AVAILABLE_COLUMNS = [
+  // 4 columnas obligatorias fijas (Requerimiento estricto)
+  { id: 'connection_name', label: 'Conexión', locked: true, default: true, sortKey: 'connection_name' },
+  { id: 'severity', label: 'Severidad', locked: true, default: true, sortKey: 'severity' },
+  { id: 'score_base', label: 'CVSS', locked: true, default: true, sortKey: 'score_base' },
+  { id: 'cve_id', label: 'CVE ID', locked: true, default: true, sortKey: 'cve_id' },
+
+  // 5 columnas activas por defecto (desactivables a gusto)
+  { id: 'agent_name', label: 'Agente / Equipo', locked: false, default: true, sortKey: 'agent_name' },
+  { id: 'package_name', label: 'Software Afectado', locked: false, default: true, sortKey: 'package_name' },
+  { id: 'dwell_time_days', label: 'Días Activa', locked: false, default: true, sortKey: 'dwell_time_days' },
+  { id: 'total_age_days', label: 'Tiempo Total', locked: false, default: true, sortKey: 'total_age_days' },
+  { id: 'timeline', label: 'Línea de Tiempo', locked: false, default: true, sortKey: 'last_seen' },
+
+  // Columnas adicionales de Wazuh disponibles para activar/desactivar
+  { id: 'status', label: 'Estado', locked: false, default: false, sortKey: 'status' },
+  { id: 'os', label: 'Sistema Operativo', locked: false, default: false, sortKey: 'os_full' },
+  { id: 'agent_id', label: 'ID Agente', locked: false, default: false, sortKey: 'agent_id' },
+  { id: 'package_arch', label: 'Arquitectura / Tipo', locked: false, default: false, sortKey: 'package_arch' },
+  { id: 'detected_at', label: 'Fecha Detección', locked: false, default: false, sortKey: 'detected_at' },
+  { id: 'published_at', label: 'Fecha NVD', locked: false, default: false, sortKey: 'published_at' },
+  { id: 'scanner_vendor', label: 'Scanner / Proveedor', locked: false, default: false, sortKey: 'scanner_vendor' },
+  { id: 'tags', label: 'Etiquetas (Tags)', locked: false, default: false, sortKey: 'tags' }
+]
+
+const MANDATORY_COLUMN_IDS = ['connection_name', 'severity', 'score_base', 'cve_id']
+const DEFAULT_COLUMN_IDS = AVAILABLE_COLUMNS.filter(c => c.default).map(c => c.id)
+const STORAGE_KEY_COLUMNS = 'dashboard_visible_columns'
+
+const showColumnPicker = ref(false)
+const toggleColumnPicker = () => {
+  showColumnPicker.value = !showColumnPicker.value
+}
+const closeColumnPicker = () => {
+  showColumnPicker.value = false
+}
+
+const loadSavedColumns = () => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_COLUMNS)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Asegurar que las 4 columnas obligatorias siempre estén presentes
+        const merged = Array.from(new Set([...MANDATORY_COLUMN_IDS, ...parsed]))
+        const validIds = new Set(AVAILABLE_COLUMNS.map(c => c.id))
+        return merged.filter(id => validIds.has(id))
+      }
+    }
+  } catch (e) {
+    console.warn('Error al cargar columnas desde localStorage', e)
+  }
+  return [...DEFAULT_COLUMN_IDS]
+}
+
+const visibleColumnIds = ref(loadSavedColumns())
+
+const isColVisible = (id) => visibleColumnIds.value.includes(id)
+
+const toggleColumn = (id) => {
+  if (MANDATORY_COLUMN_IDS.includes(id)) return // Protegida contra desactivación
+  const idx = visibleColumnIds.value.indexOf(id)
+  if (idx >= 0) {
+    visibleColumnIds.value.splice(idx, 1)
+  } else {
+    visibleColumnIds.value.push(id)
+  }
+  try {
+    localStorage.setItem(STORAGE_KEY_COLUMNS, JSON.stringify(visibleColumnIds.value))
+  } catch (e) {
+    console.warn('Error al guardar columnas en localStorage', e)
+  }
+}
+
+const resetColumnsToDefault = () => {
+  visibleColumnIds.value = [...DEFAULT_COLUMN_IDS]
+  try {
+    localStorage.setItem(STORAGE_KEY_COLUMNS, JSON.stringify(visibleColumnIds.value))
+  } catch (e) {
+    console.warn('Error al guardar columnas en localStorage', e)
+  }
+}
+
 const vulns = ref([])
 const loading = ref(true)
 const syncing = ref(false)
@@ -679,9 +901,9 @@ const setStatusFilter = (val) => {
   currentPage.value = 1
 }
 
-const onConnectionSelect = (val) => {
+const onConnectionSelect = async (val) => {
   selectedConnection.value = val
-  onConnectionChange()
+  await onConnectionChange()
 }
 
 const buildTimeline = async () => {
@@ -716,7 +938,7 @@ const compareValues = (a, b, key) => {
   let aVal = a[key]
   let bVal = b[key]
 
-  if (key === 'first_seen' || key === 'last_seen') {
+  if (key === 'first_seen' || key === 'last_seen' || key === 'detected_at' || key === 'published_at') {
     aVal = aVal ? new Date(aVal).getTime() : 0
     bVal = bVal ? new Date(bVal).getTime() : 0
     return aVal - bVal
@@ -724,6 +946,14 @@ const compareValues = (a, b, key) => {
     aVal = getSeverityLevel(aVal)
     bVal = getSeverityLevel(bVal)
     return aVal - bVal
+  } else if (key === 'tags') {
+    const aLen = Array.isArray(a.tags) ? a.tags.length : 0
+    const bLen = Array.isArray(b.tags) ? b.tags.length : 0
+    return aLen - bLen
+  } else if (key === 'os_full') {
+    aVal = a.os_full || a.os_platform || ''
+    bVal = b.os_full || b.os_platform || ''
+    return aVal.toLowerCase().localeCompare(bVal.toLowerCase())
   } else {
     aVal = aVal || ''
     bVal = bVal || ''
@@ -766,7 +996,7 @@ const updateFilterOptions = () => {
 // Funciones de Coincidencia de Filtros
 // ============================================================================
 const matchesConnection = (vuln) => 
-  !selectedConnection.value || vuln.connection_id === selectedConnection.value
+  !selectedConnection.value || String(vuln.connection_id) === String(selectedConnection.value)
 
 const matchesAgent = (vuln) => 
   selectedAgents.value.length === 0 || selectedAgents.value.includes(vuln.agent_name)
@@ -796,7 +1026,7 @@ const matchesStatus = (vuln) => {
   if (!selectedStatus.value || selectedStatus.value === 'all') return true
   const statusUpper = (vuln.status || '').toUpperCase()
   if (selectedStatus.value === 'active') return statusUpper === 'ACTIVE'
-  if (selectedStatus.value === 'resolved') return statusUpper === 'RESOLVED'
+  if (selectedStatus.value === 'resolved') return statusUpper === 'RESOLVED' || statusUpper === 'MITIGATED'
   return true
 }
 
@@ -914,7 +1144,7 @@ const sortBy = (key) => {
   }
 }
 
-const onConnectionChange = () => {
+const onConnectionChange = async () => {
   selectedAgents.value = []
   selectedVulns.value = []
   selectedPackages.value = []
@@ -922,8 +1152,10 @@ const onConnectionChange = () => {
   selectedTags.value = []
   scoreMin.value = ''
   scoreMax.value = ''
+  // Sincronizar inventario completo con la conexión seleccionada
+  await fetchVulns(selectedConnection.value)
   if (selectedConnection.value) {
-    buildTimeline()
+    await buildTimeline()
   }
 }
 
@@ -942,11 +1174,16 @@ const clearFilters = () => {
 // ============================================================================
 // Carga de Datos API
 // ============================================================================
-const fetchVulns = async () => {
+const fetchVulns = async (connectionId = null) => {
   loading.value = true
   error.value = ''
   try {
-    const res = await vulnService.getVulns()
+    const params = { limit: 2000 }
+    const connId = connectionId !== null ? connectionId : selectedConnection.value
+    if (connId) {
+      params.connectionId = connId
+    }
+    const res = await vulnService.getVulns(params)
     if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
       vulns.value = res.data
       updateFilterOptions()
@@ -1009,6 +1246,15 @@ const isNew = (firstSeenDate) => {
   const diffTime = Math.abs(now - firstSeen)
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   return diffDays <= 1
+}
+
+const getStatusBadgeClass = (status) => {
+  const s = (status || 'ACTIVE').toUpperCase()
+  if (s === 'ACTIVE') return 'status-active'
+  if (s === 'RESOLVED') return 'status-resolved'
+  if (s === 'MITIGATED') return 'status-mitigated'
+  if (s === 'IN_REVIEW') return 'status-in-review'
+  return 'status-active'
 }
 
 const getSeverityClass = (severity) => {
@@ -1075,8 +1321,20 @@ const timeAgo = (date) => {
 }
 
 onMounted(() => {
+  const accessDeniedMsg = sessionStorage.getItem('access_denied_message')
+  if (accessDeniedMsg) {
+    sessionStorage.removeItem('access_denied_message')
+    Swal.fire({
+      title: 'Acceso Restringido',
+      text: accessDeniedMsg,
+      icon: 'warning',
+      confirmButtonColor: 'var(--primary)',
+      background: 'var(--bg-panel)',
+      color: 'var(--text-main)',
+    })
+  }
   fetchConnections()
-  fetchVulns()
+  fetchVulns(selectedConnection.value)
 })
 </script>
 
@@ -1475,26 +1733,314 @@ th {
 
 .vuln-table {
   width: 100%;
-  table-layout: fixed;
+  min-width: 100%;
+  table-layout: auto;
   border-collapse: collapse;
 }
 
 .vuln-table th,
 .vuln-table td {
-  padding: 0.8rem 0.65rem;
+  padding: 0.8rem 0.75rem;
   font-size: 0.84rem;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
-.vuln-table .col-connection { width: 9%; }
-.vuln-table .col-severity { width: 10%; }
-.vuln-table .col-score { width: 6%; text-align: center; }
-.vuln-table .col-cve { width: 12%; }
-.vuln-table .col-agent { width: 12%; }
-.vuln-table .col-package { width: 20%; }
-.vuln-table .col-dwell { width: 7%; text-align: center; }
-.vuln-table .col-age { width: 7%; text-align: center; }
-.vuln-table .col-timeline { width: 17%; }
+.vuln-table th {
+  white-space: nowrap;
+  user-select: none;
+}
+
+.vuln-table .col-connection { min-width: 110px; }
+.vuln-table .col-severity { min-width: 105px; }
+.vuln-table .col-score { min-width: 75px; text-align: center; }
+.vuln-table .col-cve { min-width: 135px; }
+.vuln-table .col-status { min-width: 95px; text-align: center; }
+.vuln-table .col-agent { min-width: 150px; }
+.vuln-table .col-agent-id { min-width: 90px; text-align: center; }
+.vuln-table .col-os { min-width: 145px; }
+.vuln-table .col-package { min-width: 175px; }
+.vuln-table .col-arch { min-width: 130px; }
+.vuln-table .col-dwell { min-width: 85px; text-align: center; }
+.vuln-table .col-age { min-width: 90px; text-align: center; }
+.vuln-table .col-detected { min-width: 135px; }
+.vuln-table .col-published { min-width: 135px; }
+.vuln-table .col-vendor { min-width: 120px; }
+.vuln-table .col-tags { min-width: 140px; }
+.vuln-table .col-timeline { min-width: 190px; }
+
+/* Selector de Columnas Visibles (Image 3 inspired) */
+.col-picker-container {
+  position: relative;
+  display: inline-block;
+}
+
+.btn-col-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.85rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-main);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-col-picker:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-col-picker-active {
+  border-color: var(--primary);
+  background: rgba(110, 164, 42, 0.08);
+  color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+.col-counter-pill {
+  padding: 0.15rem 0.5rem;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.btn-col-picker-active .col-counter-pill {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+}
+
+.chevron-arrow {
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+}
+
+.col-picker-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 440px;
+  max-width: 90vw;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  z-index: 50;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.col-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-hover);
+}
+
+.cp-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cp-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.cp-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text-main);
+}
+
+.cp-subtitle {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.btn-reset-columns {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-reset-columns:hover {
+  background: var(--bg-card);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.col-picker-content {
+  padding: 1rem 1.1rem;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* Image 3 Inspired Pill Chips */
+.pill-chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.pill-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.38rem 0.75rem;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-main);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.18s ease;
+}
+
+.pill-chip-btn:hover:not(:disabled) {
+  border-color: #9ca3af;
+  background: var(--bg-hover);
+}
+
+.pill-chip-btn.is-active {
+  background: rgba(110, 164, 42, 0.08);
+  border-color: var(--primary);
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.pill-chip-btn.is-locked {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #374151;
+  cursor: not-allowed;
+  opacity: 0.95;
+}
+
+.pill-round-checkbox {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 1.5px solid #d1d5db;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  color: #ffffff;
+}
+
+.pill-chip-btn.is-active .pill-round-checkbox {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.pill-chip-btn.is-locked .pill-round-checkbox {
+  background: #6b7280;
+  border-color: #6b7280;
+  color: #ffffff;
+}
+
+.pill-chip-text {
+  line-height: 1.2;
+}
+
+.pill-locked-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: #e5e7eb;
+  color: #4b5563;
+  margin-left: 0.15rem;
+}
+
+.col-picker-footer {
+  padding: 0.65rem 1.1rem;
+  background: var(--bg-hover);
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.cp-footer-note {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Badges de estado */
+.badge-status-pill {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.badge-status-pill.status-active {
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+
+.badge-status-pill.status-mitigated {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.badge-status-pill.status-in-review {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.badge-status-pill.status-resolved {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.agent-id-code {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.45rem;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+}
 
 .cell-truncate {
   overflow: hidden;

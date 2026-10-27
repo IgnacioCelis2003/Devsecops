@@ -12,8 +12,8 @@ const routes = [
   { path: '/', name: 'Login', component: Login },
   { path: '/login', name: 'LoginRoute', component: Login },
   { path: '/dashboard', name: 'Dashboard', component: Dashboard, meta: { requiresAuth: true } },
-  { path: '/config-user', name: 'ConfigUser', component: ConfigUser, meta: { requiresAuth: true } },
-  { path: '/config-wazuh', name: 'ConfigWazuh', component: ConfigWazuh, meta: { requiresAuth: true } },
+  { path: '/config-user', name: 'ConfigUser', component: ConfigUser, meta: { requiresAuth: true, requiresAdmin: true } },
+  { path: '/config-wazuh', name: 'ConfigWazuh', component: ConfigWazuh, meta: { requiresAuth: true, requiresAdmin: true } },
   { path: '/change-password', name: 'ChangePassword', component: ChangePassword, meta: { requiresAuth: true } },
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFound },
 ]
@@ -59,6 +59,16 @@ router.beforeEach(async (to, from) => {
           'Para continuar, debes cambiar tu contraseña obligatoriamente.'
         )
         return '/change-password'
+      }
+
+      // Proteger rutas exclusivas de administrador
+      const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin)
+      if (requiresAdmin && user.role !== 'admin') {
+        sessionStorage.setItem(
+          'access_denied_message',
+          'No tienes permisos de administrador para acceder a esta sección.'
+        )
+        return '/dashboard'
       }
 
       return true

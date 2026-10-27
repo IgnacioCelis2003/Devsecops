@@ -26,8 +26,9 @@
               <th @click="sortBy('last_seen')">Ultimo sync</th>
               <th @click="sortBy('dwell_time_days')">Días Activa</th>
               <th @click="sortBy('total_age_days')">Edad Total</th>
-              <th @click="sortBy('status')">Estado</th>
-              <th @click="sortBy('resolved_at')">Resolucion</th>
+              <th @click="sortBy('slot_status')" title="Estado que tenía la vulnerabilidad en la fecha específica de este evento">Estado en Slot</th>
+              <th @click="sortBy('current_status')" title="Estado actual registrado en el inventario general">Estado Actual</th>
+              <th @click="sortBy('resolved_at')">Resolución</th>
             </tr>
           </thead>
           <tbody>
@@ -52,10 +53,19 @@
               <td>{{ vuln.last_seen ? fmtDateTime(vuln.last_seen) : '-' }}</td>
               <td>{{ vuln.dwell_time_days !== undefined && vuln.dwell_time_days !== null ? vuln.dwell_time_days.toFixed(2) : '-' }}</td>
               <td>{{ vuln.total_age_days !== undefined && vuln.total_age_days !== null ? vuln.total_age_days.toFixed(2) : '-' }}</td>
-              <td>{{ vuln.status === 'ACTIVE' ? 'ACTIVO' : 'RESUELTO' }}</td>
+              <td>
+                <span class="badge-mini" :class="(vuln.slot_status || vuln.status) === 'ACTIVE' ? 'badge-critical' : 'badge-status-resolved'">
+                  {{ (vuln.slot_status || vuln.status) === 'ACTIVE' ? 'ACTIVO' : 'RESUELTO' }}
+                </span>
+              </td>
+              <td>
+                <span class="badge-mini" :class="getStatusBadgeClass(vuln.current_status || vuln.status)">
+                  {{ (vuln.current_status || vuln.status || 'ACTIVE').toUpperCase() }}
+                </span>
+              </td>
               <td>{{ vuln.resolved_at ? fmtDateTime(vuln.resolved_at) : '-' }}</td>
             </tr>
-            <tr v-if="rows.length === 0"><td colspan="13" class="empty-row">Sin coincidencias</td></tr>
+            <tr v-if="rows.length === 0"><td colspan="14" class="empty-row">Sin coincidencias</td></tr>
           </tbody>
         </table>
       </div>
@@ -90,6 +100,16 @@ watch(
     sortOrder.value = 1
   }
 )
+
+
+const getStatusBadgeClass = (status) => {
+  const s = (status || '').toUpperCase()
+  if (s === 'ACTIVE') return 'badge-critical'
+  if (s === 'RESOLVED') return 'badge-status-resolved'
+  if (s === 'MITIGATED') return 'badge-status-mitigated'
+  if (s === 'IN_REVIEW') return 'badge-status-in-review'
+  return 'badge-mini'
+}
 
 const sortBy = key => {
   if (sortKey.value === key) {
@@ -144,4 +164,29 @@ const rows = computed(() => {
 .empty-row { text-align: center; color: var(--text-muted); }
 .modal-bottom { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.2rem; border-top: 1px solid var(--border); font-size: 0.78rem; color: var(--text-muted); }
 .modal-outline { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+
+.badge-status-resolved {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+}
+.badge-status-mitigated {
+  background: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
+}
+.badge-status-in-review {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+.badge-mini {
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-critical {
+  background: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+}
+
 </style>
