@@ -2,7 +2,13 @@ import pytest
 import os
 os.environ["ENCRYPTION_KEY"] = "V3pXU0Y1ZzV3S09SclpIbmVyeXpZREp3Y0p6S2pYUTQ="
 from unittest.mock import patch
-from app.models import User, WazuhConnection, WazuhVulnerability, VulnerabilityHistory
+from app.models import (
+    User,
+    VulnerabilityEvent,
+    VulnerabilityHistory,
+    WazuhConnection,
+    WazuhVulnerability,
+)
 from app.auth import hash_password
 from app.crypto import encrypt
 
@@ -493,6 +499,10 @@ def test_new_vuln_creates_detected_history(mock_fetch, client, db_session):
     client.post(f"/wazuh-connections/{conn.id}/sync", headers=_get_headers(client))
     actions = [h.action for h in db_session.query(VulnerabilityHistory).all()]
     assert "DETECTED" in actions
+    event_types = [
+        e.event_type for e in db_session.query(VulnerabilityEvent).all()
+    ]
+    assert event_types == ["DETECTED"]
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")
@@ -510,6 +520,10 @@ def test_resolved_vuln_gets_reopened(mock_fetch, client, db_session):
     assert vuln.status == "ACTIVE"
     actions = [h.action for h in db_session.query(VulnerabilityHistory).all()]
     assert "REOPENED" in actions
+    event_types = [
+        e.event_type for e in db_session.query(VulnerabilityEvent).all()
+    ]
+    assert event_types.count("REOPENED") == 1
     # Verifica que last_seen se actualiza pero first_seen no cambia
     assert vuln.first_seen is not None
     assert vuln.last_seen is not None
@@ -527,6 +541,10 @@ def test_vuln_resolved_when_absent_from_payload(mock_fetch, client, db_session):
     client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
     vuln = db_session.query(WazuhVulnerability).first()
     assert vuln.status == "RESOLVED"
+    event_types = [
+        e.event_type for e in db_session.query(VulnerabilityEvent).all()
+    ]
+    assert event_types.count("RESOLVED") == 1
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")
@@ -540,6 +558,44 @@ def test_severity_change_logged_in_history(mock_fetch, client, db_session):
     client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
     actions = [h.action for h in db_session.query(VulnerabilityHistory).all()]
     assert "SEVERITY_CHANGED" in actions
+    event_types = [
+        e.event_type for e in db_session.query(VulnerabilityEvent).all()
+    ]
+    assert event_types.count("SEVERITY_CHANGED") == 1
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_repeated_sync_does_not_duplicate_events(mock_fetch, client, db_session):
+    mock_fetch.return_value = _raw_vuln()
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    headers = _get_headers(client)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+    events = db_session.query(VulnerabilityEvent).all()
+    assert len(events) == 1
+    assert events[0].event_type == "DETECTED"
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_vuln_events_and_history_endpoints(mock_fetch, client, db_session):
+    mock_fetch.return_value = _raw_vuln()
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    headers = _get_headers(client)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+    vuln = db_session.query(WazuhVulnerability).first()
+
+    events_res = client.get("/vulns/events", headers=headers)
+    assert events_res.status_code == 200
+    assert events_res.json()[0]["event_type"] == "DETECTED"
+
+    history_res = client.get(f"/vulns/{vuln.id}/history", headers=headers)
+    assert history_res.status_code == 200
+    assert history_res.json()[0]["action"] == "DETECTED"
+
+    missing_res = client.get("/vulns/9999/history", headers=headers)
+    assert missing_res.status_code == 404
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")

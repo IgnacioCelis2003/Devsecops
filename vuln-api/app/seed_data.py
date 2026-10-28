@@ -5,10 +5,11 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from .crypto import encrypt
-from .db import Base, engine, ensure_schema_compatibility
+from .db import Base, engine
 from .models import (
     User,
     UserInteraction,
+    VulnerabilityEvent,
     VulnerabilityHistory,
     WazuhConnection,
     WazuhVulnerability,
@@ -50,8 +51,8 @@ def encrypted_password(value: str) -> str:
 
 
 def seed_database(json_path: str | Path = DEFAULT_DATA_PATH, replace: bool = False):
-    Base.metadata.create_all(bind=engine)
-    ensure_schema_compatibility()
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
 
     with Path(json_path).open("r", encoding="utf-8") as file:
         data = json.load(file)
@@ -61,6 +62,7 @@ def seed_database(json_path: str | Path = DEFAULT_DATA_PATH, replace: bool = Fal
         connection_ids = {}
 
         if replace:
+            session.query(VulnerabilityEvent).delete()
             session.query(VulnerabilityHistory).delete()
             session.query(WazuhVulnerability).delete()
             session.query(UserInteraction).delete()
@@ -104,6 +106,10 @@ def seed_database(json_path: str | Path = DEFAULT_DATA_PATH, replace: bool = Fal
                 name=item["name"]
             ).one()
             connection_ids[item["id"]] = connection.id
+
+        vuln_meta = {
+            item["id"]: item for item in data.get("wazuh_vulnerabilities", [])
+        }
 
         for item in data.get("user_interactions", []):
             if session.get(UserInteraction, item.get("id")) is None:
@@ -154,6 +160,28 @@ def seed_database(json_path: str | Path = DEFAULT_DATA_PATH, replace: bool = Fal
                     action=item["action"],
                     details=item.get("details"),
                     timestamp=parse_datetime(item.get("timestamp")),
+                ))
+
+        if session.query(VulnerabilityEvent).first() is None:
+            for item in data.get("vulnerability_history", []):
+                meta = vuln_meta.get(item["vulnerability_id"], {})
+                action = item["action"]
+                if action == "RESOLVED":
+                    status = "RESOLVED"
+                elif action in ("DETECTED", "REOPENED"):
+                    status = "ACTIVE"
+                else:
+                    status = meta.get("status", "ACTIVE")
+                session.add(VulnerabilityEvent(
+                    event_time=parse_datetime(item.get("timestamp")),
+                    event_type=action,
+                    vulnerability_id=item["vulnerability_id"],
+                    connection_id=connection_ids.get(meta.get("connection_id")),
+                    agent_id=meta.get("agent_id"),
+                    cve_id=meta.get("cve_id"),
+                    severity=meta.get("severity"),
+                    status=status,
+                    details={"details": item.get("details")},
                 ))
 
         session.commit()

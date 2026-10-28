@@ -1,11 +1,18 @@
 # app/routers/vulns_router.py
-from typing import Optional
-from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import BigInteger, DateTime, Integer, String, Text, column, func, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from ..db import get_db
-from ..models import User, WazuhConnection, WazuhVulnerability
+from ..db import engine, get_db
+from ..models import (
+    User,
+    VulnerabilityEvent,
+    VulnerabilityHistory,
+    WazuhConnection,
+    WazuhVulnerability,
+)
 from ..auth import get_current_user_enforcing_password_change, require_admin
 from ..clients.wazuh_client import fetch_all_vulns
 from ..crypto import decrypt
@@ -48,20 +55,29 @@ def list_vulns(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_enforcing_password_change),
 ):
-    dwell_time_expression = (
-        func.extract(
-            "epoch",
-            WazuhVulnerability.last_seen - WazuhVulnerability.first_seen,
-        )
-        / 86400.0
-    ).label("dwell_time_days")
-    age_expression = (
-        func.extract(
-            "epoch",
-            func.now() - WazuhVulnerability.first_seen,
-        )
-        / 86400.0
-    ).label("total_age_days")
+    if engine.dialect.name == "postgresql":
+        dwell_time_expression = func.fn_calculate_dwell_time(
+            WazuhVulnerability.first_seen,
+            WazuhVulnerability.last_seen,
+        ).label("dwell_time_days")
+        age_expression = func.fn_calculate_total_age(
+            WazuhVulnerability.first_seen,
+        ).label("total_age_days")
+    else:
+        dwell_time_expression = (
+            func.extract(
+                "epoch",
+                WazuhVulnerability.last_seen - WazuhVulnerability.first_seen,
+            )
+            / 86400.0
+        ).label("dwell_time_days")
+        age_expression = (
+            func.extract(
+                "epoch",
+                func.now() - WazuhVulnerability.first_seen,
+            )
+            / 86400.0
+        ).label("total_age_days")
 
     query = db.query(
         WazuhVulnerability,
@@ -120,4 +136,123 @@ def list_vulns(
             ],
         }
         for v, dwell, age in results
+    ]
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _serialize_event(event: VulnerabilityEvent) -> dict:
+    return {
+        "id": event.id,
+        "event_time": event.event_time,
+        "event_type": event.event_type,
+        "vulnerability_id": event.vulnerability_id,
+        "connection_id": event.connection_id,
+        "agent_id": event.agent_id,
+        "cve_id": event.cve_id,
+        "severity": event.severity,
+        "status": event.status,
+        "details": event.details,
+    }
+
+
+@router.get("/events")
+def list_events(
+    connection_id: int = None,
+    event_type: str = None,
+    agent_id: str = None,
+    cve_id: str = None,
+    from_ts: datetime = Query(None, alias="from"),
+    to_ts: datetime = Query(None, alias="to"),
+    limit: int = Query(100, ge=0, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
+):
+    from_ts = _as_utc(from_ts)
+    to_ts = _as_utc(to_ts)
+
+    if engine.dialect.name == "postgresql":
+        event_table = func.fn_vulnerability_events_in_range(
+            connection_id,
+            from_ts,
+            to_ts,
+        ).table_valued(
+            column("id", BigInteger),
+            column("event_time", DateTime(timezone=True)),
+            column("event_type", String),
+            column("vulnerability_id", Integer),
+            column("connection_id", Integer),
+            column("agent_id", String),
+            column("cve_id", Text),
+            column("severity", Text),
+            column("status", Text),
+            column("details", JSONB),
+        ).alias("events")
+        statement = select(event_table)
+        if event_type is not None:
+            statement = statement.where(event_table.c.event_type == event_type)
+        if agent_id is not None:
+            statement = statement.where(event_table.c.agent_id == agent_id)
+        if cve_id is not None:
+            statement = statement.where(event_table.c.cve_id == cve_id)
+        statement = (
+            statement.order_by(event_table.c.event_time.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return [dict(row) for row in db.execute(statement).mappings().all()]
+
+    query = db.query(VulnerabilityEvent)
+    if connection_id is not None:
+        query = query.filter(VulnerabilityEvent.connection_id == connection_id)
+    if event_type is not None:
+        query = query.filter(VulnerabilityEvent.event_type == event_type)
+    if agent_id is not None:
+        query = query.filter(VulnerabilityEvent.agent_id == agent_id)
+    if cve_id is not None:
+        query = query.filter(VulnerabilityEvent.cve_id == cve_id)
+    if from_ts is not None:
+        query = query.filter(VulnerabilityEvent.event_time >= from_ts)
+    if to_ts is not None:
+        query = query.filter(VulnerabilityEvent.event_time < to_ts)
+    events = (
+        query.order_by(VulnerabilityEvent.event_time.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return [_serialize_event(event) for event in events]
+
+
+@router.get("/{vuln_id}/history")
+def get_vuln_history(
+    vuln_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
+):
+    vulnerability = db.get(WazuhVulnerability, vuln_id)
+    if vulnerability is None:
+        raise HTTPException(status_code=404, detail="Vulnerabilidad no encontrada")
+    history = (
+        db.query(VulnerabilityHistory)
+        .filter(VulnerabilityHistory.vulnerability_id == vuln_id)
+        .order_by(
+            VulnerabilityHistory.timestamp.asc(),
+            VulnerabilityHistory.id.asc(),
+        )
+        .all()
+    )
+    return [
+        {
+            "id": item.id,
+            "action": item.action,
+            "details": item.details,
+            "timestamp": item.timestamp,
+        }
+        for item in history
     ]

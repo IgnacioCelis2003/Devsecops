@@ -6,8 +6,10 @@
 PROJECT_DIR=$(pwd)
 CRON_MARKER="# VULN_APP_CERTBOT_RENEWAL"
 DB_CERT_DEST="$HOME/certs_db"
+DB_CERT_UID=70
 # El comando entra a la carpeta del proyecto, intenta renovar, y si tiene éxito, recarga Nginx
 CRON_CMD="0 3 * * * cd \"$PROJECT_DIR\" && docker compose run --rm certbot renew --quiet && docker exec frontend nginx -s reload"
+
 
 echo "================================================="
 echo "   Selector de Entorno: Autofirmado vs Let's Encrypt"
@@ -46,7 +48,7 @@ if [ "$OPCION" == "1" ]; then
     mkdir -p "$DB_CERT_DEST"
     sudo cp ./nginx/ssl/nginx-selfsigned.crt "$DB_CERT_DEST/"
     sudo cp ./nginx/ssl/nginx-selfsigned.key "$DB_CERT_DEST/"
-    sudo chown 999:999 "$DB_CERT_DEST/nginx-selfsigned.key" "$DB_CERT_DEST/nginx-selfsigned.crt"
+    sudo chown "$DB_CERT_UID:$DB_CERT_UID" "$DB_CERT_DEST/nginx-selfsigned.key" "$DB_CERT_DEST/nginx-selfsigned.crt"
     sudo chmod 600 "$DB_CERT_DEST/nginx-selfsigned.key"
     sudo chmod 644 "$DB_CERT_DEST/nginx-selfsigned.crt"
 
@@ -56,7 +58,7 @@ if [ "$OPCION" == "1" ]; then
         sudo mkdir -p /root/certs_db
         sudo cp ./nginx/ssl/nginx-selfsigned.crt /root/certs_db/
         sudo cp ./nginx/ssl/nginx-selfsigned.key /root/certs_db/
-        sudo chown 999:999 /root/certs_db/nginx-selfsigned.key /root/certs_db/nginx-selfsigned.crt
+        sudo chown "$DB_CERT_UID:$DB_CERT_UID" /root/certs_db/nginx-selfsigned.key /root/certs_db/nginx-selfsigned.crt
         sudo chmod 600 /root/certs_db/nginx-selfsigned.key
         sudo chmod 644 /root/certs_db/nginx-selfsigned.crt
     fi
