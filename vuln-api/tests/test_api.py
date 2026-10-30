@@ -887,3 +887,39 @@ def test_viewer_role_forbidden_actions(client, db_session):
 
     res2 = client.post("/users", json={"username": "new", "password": "123"}, headers=headers)
     assert res2.status_code == 403
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_user_tag_filtering(mock_fetch, client, db_session):
+    mock_fetch.return_value = [
+        {
+            "agent": {"id": "001", "name": "host-dev"},
+            "host": {"os": {}},
+            "package": {"name": "lib1", "version": "1.0", "type": "deb", "architecture": "amd64"},
+            "vulnerability": {"id": "CVE-2023-0001", "severity": "High", "score": {}},
+        },
+        {
+            "agent": {"id": "002", "name": "host-prod"},
+            "host": {"os": {}},
+            "package": {"name": "lib2", "version": "2.0", "type": "deb", "architecture": "amd64"},
+            "vulnerability": {"id": "CVE-2023-0002", "severity": "Medium", "score": {}},
+        }
+    ]
+    _create_user(db_session, username="admin_user", role="admin")
+    conn = _create_connection(db_session)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=_get_headers(client, username="admin_user", password="admin"))
+
+    vulns = db_session.query(WazuhVulnerability).all()
+    if len(vulns) >= 2:
+        vulns[0].tags = ["dev"]
+        vulns[1].tags = ["prod"]
+        db_session.commit()
+
+    viewer = _create_user(db_session, username="dev_viewer", role="viewer")
+    viewer.tags = ["dev"]
+    db_session.commit()
+
+    headers_viewer = _get_headers(client, username="dev_viewer", password="admin")
+    res = client.get("/vulns", headers=headers_viewer).json()
+    assert res["total"] == 1
+    assert res["items"][0]["cve_id"] == "CVE-2023-0001"

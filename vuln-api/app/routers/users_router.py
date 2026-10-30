@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import User
 from ..auth import get_current_user, get_current_user_enforcing_password_change, require_admin, hash_password
-from ..schemas.user_schemas import NewUserRequest
+from ..schemas.user_schemas import NewUserRequest, UpdateUserRequest
 
 router = APIRouter()
 
@@ -18,6 +18,7 @@ def get_user_me(current_user: User = Depends(get_current_user)):
         "is_active": current_user.is_active,
         "is_default_password": current_user.is_default_password,
         "role": current_user.role or "admin",
+        "tags": current_user.tags or [],
     }
 
 
@@ -36,7 +37,8 @@ def create_user(
         password_hash=hash_password(request.password),
         is_default_password=True,
         is_active=True,
-        role="viewer",
+        role=request.role or "viewer",
+        tags=request.tags or [],
     )
     db.add(new_user)
     db.commit()
@@ -48,7 +50,33 @@ def list_users(
     current_user: User = Depends(get_current_user_enforcing_password_change), db: Session = Depends(get_db)
 ):
     users = db.query(User).all()
-    return [{"id": u.id, "username": u.username} for u in users]
+    return [{
+        "id": u.id,
+        "username": u.username,
+        "role": u.role or "admin",
+        "tags": u.tags or [],
+        "is_active": u.is_active,
+    } for u in users]
+
+
+@router.put("/{user_id}")
+def update_user(
+    user_id: int,
+    request: UpdateUserRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if request.role is not None:
+        user.role = request.role
+    if request.tags is not None:
+        user.tags = request.tags
+    if request.is_active is not None:
+        user.is_active = request.is_active
+    db.commit()
+    return {"message": "Usuario actualizado exitosamente"}
 
 
 @router.delete("/{user_id}")

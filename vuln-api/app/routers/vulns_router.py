@@ -106,6 +106,26 @@ def list_vulns(
         ).label("total_age_days")
 
     filters = []
+    user_role = current_user.role or "admin"
+    if user_role != "admin" and current_user.tags:
+        user_tags = [t for t in current_user.tags if t]
+        if user_tags:
+            if engine.dialect.name == "postgresql":
+                tag_table = func.json_array_elements_text(
+                    WazuhVulnerability.tags
+                ).table_valued("value").alias("user_tag")
+            else:
+                tag_table = func.json_each(
+                    WazuhVulnerability.tags
+                ).table_valued("value").alias("user_tag")
+            filters.append(
+                exists(
+                    select(1)
+                    .select_from(tag_table)
+                    .where(tag_table.c.value.in_(user_tags))
+                )
+            )
+
     if connection_id is not None:
         filters.append(WazuhVulnerability.connection_id == connection_id)
     if agent_name:

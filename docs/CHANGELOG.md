@@ -201,7 +201,17 @@ Este documento recoge los cambios relevantes realizados durante el desarrollo de
 - Verificación: 72 tests de SQLite pasan en el contenedor `devsecops-api`. En un PostgreSQL 15 temporal se validaron el filtro de tags, el orden por longitud de tags y el bloqueo/liberación de `pg_advisory_xact_lock` entre dos sesiones.
 
 ---
-
-### 16) Nota final
+ 
+### 16) Filtrado por Etiquetas de Agente (Agent Labels / Tags)
+ 
+- Se implementó el filtrado de vulnerabilidades basado en las etiquetas (`tags`) asignadas al usuario y a cada agente/vulnerabilidad.
+- Los usuarios con rol `viewer` ven restringida su vista únicamente a las vulnerabilidades que comparten al menos una etiqueta común con las etiquetas asignadas a su perfil; los administradores mantienen visibilidad global.
+- Se actualizó el esquema de usuario (`NewUserRequest`/`UpdateUserRequest`) para gestionar `tags` y `role`.
+- Se añadió el endpoint `PUT /users/{id}` (admin-only) para permitir la gestión de etiquetas y roles de usuario.
+- Se validó la funcionalidad mediante tests unitarios, asegurando la compatibilidad con el filtrado en servidor ya existente.
+ 
+---
+ 
+### 17) Nota final
 
 Este changelog recoge los cambios realizados hasta el momento de forma práctica y orientada al proyecto real. La rama de trabajo se ha centrado en dejar la aplicación usable localmente, con datos de prueba, TimescaleDB activo, la hypertable `vulnerability_events` creada, eventos emitidos desde la sincronización, funciones PL/pgSQL usadas por la API y el backend de Fase 2 con paginación server-side. El siguiente paso es adaptar el Dashboard, Timeline y etiquetas al contrato documentado en `docs/FRONTEND_API_NOTES.md`.
