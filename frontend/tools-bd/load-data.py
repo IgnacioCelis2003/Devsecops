@@ -1,16 +1,19 @@
 """
 Script CLI para cargar datos de prueba Wazuh en la base de datos PostgreSQL.
 Uso:
-    python vuln-api/app/load-data.py [--replace] [ruta_al_json]
+    python frontend/tools-bd/load-data.py [--replace] [ruta_al_json]
 """
 import sys
 import argparse
 from pathlib import Path
 
-# Agregar directorio superior al sys.path para importaciones de módulo
+from dotenv import load_dotenv
+
+# Agregar el paquete vuln-api al sys.path para importar app.seed_data
 CURRENT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CURRENT_DIR.parent.parent
-sys.path.insert(0, str(CURRENT_DIR.parent))
+load_dotenv(PROJECT_ROOT / ".env")
+sys.path.insert(0, str(PROJECT_ROOT / "vuln-api"))
 
 from app.seed_data import seed_database, DEFAULT_DATA_PATH
 

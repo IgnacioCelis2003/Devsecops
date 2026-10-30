@@ -128,17 +128,38 @@ Este documento recoge los cambios relevantes realizados durante el desarrollo de
 - Los eventos solo se generan en transiciones reales: sincronizaciones repetidas de una vulnerabilidad activa no crean eventos duplicados. También se deduplican las claves repetidas dentro de un mismo payload.
 - El seed genera eventos a partir del historial cargado: 300 `DETECTED` y 145 `STATUS_CHANGED`, 445 eventos en total, con `event_time` histórico.
 - Se añadió `GET /vulns/events` con filtros por `connection_id`, `event_type`, `agent_id`, `cve_id`, rango `from`/`to`, `limit` y `offset`. En PostgreSQL usa la función `fn_vulnerability_events_in_range`; en SQLite usa una consulta ORM equivalente para los tests.
-- Se añadió `GET /vulns/{id}/history` para consultar el historial de una vulnerabilidad sin incrustarlo en el listado.
+- Se añadió `GET /vulns/{id}/history` como consulta puntual; el listado también conserva `history` en cada item.
 - En PostgreSQL, `GET /vulns` calcula `dwell_time_days` y `total_age_days` con `fn_calculate_dwell_time` y `fn_calculate_total_age`; en SQLite se conserva el cálculo portable para los tests.
 - Se actualizó `fn_vulnerability_events_in_range` para aceptar `p_from`/`p_to` nulos y no filtrar por rango cuando no se indican.
 - Se añadieron tests de emisión de eventos, idempotencia, endpoints de eventos e historial. Resultado: 66 tests pasan con SQLite.
 - Se recreó la base desde cero y se verificaron 445 eventos, 300 vulnerabilidades, 445 registros de historial, 4 usuarios, hypertable activa y endpoints `https://localhost/` y `/api/docs` con HTTP 200.
-- Queda pendiente el cambio de contrato de `GET /vulns` a paginación server-side (`{total, page, page_size, items}`), quitar el historial embebido y adaptar el Dashboard y el Timeline. Es un cambio incompatible que requiere coordinación con el frontend.
-- Por acuerdo de reparto de trabajo, este rol no modifica el contrato de `GET /vulns` ni el frontend; la paginación server-side y la adaptación del Dashboard/Timeline quedan para el integrante de frontend. El sitio sigue funcionando con el contrato actual.
+- El contrato de `GET /vulns` cambió en la Fase 2 a paginación server-side (`{total, page, page_size, items}`) e incluye `history` en cada item. El frontend debe adaptar Dashboard, Timeline y etiquetas; el contrato está documentado en `docs/FRONTEND_API_NOTES.md`.
+- El cambio es incompatible con el frontend actual. No se modificó código frontend en esta fase.
 
 ---
 
-### 12) Archivos principales tocados
+### 12) Correcciones de la revisión (Must fix)
+
+- Se corrigió `seed_database()` para avanzar las secuencias de PostgreSQL (`wazuh_vulnerabilities`, `vulnerability_history` y `user_interactions`) con `setval(pg_get_serial_sequence(...), MAX(id)+1, false)` después de insertar los IDs explícitos del seed. Sin esto, el primer sync que insertaba historial fallaba por clave duplicada (`id=1`) y las interacciones nuevas podían colisionar.
+- Se cambiaron las claves foráneas de `vulnerability_events` hacia `wazuh_vulnerabilities` y `wazuh_connections` a `ON DELETE SET NULL` en `db-init/10-init.sql`, y se actualizó el modelo ORM `VulnerabilityEvent`. Al borrar una conexión, los eventos se conservan con las referencias en `NULL` y el endpoint de borrado deja de fallar.
+- Se aplicó el cambio equivalente al volumen actual con `ALTER TABLE`; TimescaleDB propagó las restricciones a la tabla y a sus chunks. También se avanzaron las secuencias existentes (`401`, `446` y `25`). `db-init` queda correcto para volúmenes nuevos.
+- Verificación: `confdeltype='n'` en las dos claves foráneas de la tabla y de cada chunk; secuencias en `max(id)+1`; 66 tests de SQLite pasan.
+
+---
+
+### 13) Fase 2 backend: paginación, historial desacoplado y sync masivo
+
+- `GET /vulns` ahora usa `page`/`page_size` (máximo 500), devuelve `{total, page, page_size, items}` y aplica en servidor los filtros `connection_id`, `severity`, `status`, `search`, `date_from` y `date_to`.
+- `search` es insensible a mayúsculas sobre CVE, agente, nombre de agente, paquete y descripción. `date_from`/`date_to` filtran `detected_at` con rango `[date_from, date_to)`.
+- Se conserva `history` en cada item del listado paginado, para que la Timeline lo consuma sin N+1; el detalle puntual sigue en `GET /vulns/{id}/history`.
+- La sincronización usa un único lote de actualizaciones con `bulk_update_mappings`; las vulnerabilidades nuevas se insertan con un solo `add_all` + `flush`. El historial y los eventos se siguen generando solo en transiciones reales.
+- Se corrigió `frontend/tools-bd/load-data.py` para importar `app` desde `vuln-api` y cargar el `.env` de la raíz; `README.md` ahora ejecuta el loader dentro de la red de Compose con la ruta real.
+- Se añadió `docs/FRONTEND_API_NOTES.md` con el contrato nuevo y la migración mínima de `vulnService`, Dashboard, Timeline y etiquetas.
+- Verificación: 72 tests de SQLite pasan en el contenedor `devsecops-api`; el loader carga el seed completo en SQLite; una prueba de humo contra PostgreSQL real validó sync, paginación, filtros y `SEVERITY_CHANGED` con rollback al final.
+
+---
+
+### 14) Archivos principales tocados
 
 - `vuln-api/app/seed_data.py`
 - `vuln-api/app/db.py`
@@ -154,6 +175,9 @@ Este documento recoge los cambios relevantes realizados durante el desarrollo de
 - `vuln-api/app/services/wazuh_sync_service.py`
 - `vuln-api/app/routers/vulns_router.py`
 - `vuln-api/app/clients/wazuh_client.py`
+- `frontend/tools-bd/load-data.py`
+- `README.md`
+- `docs/FRONTEND_API_NOTES.md`
 - `docker-compose.yml`
 - `prod_config/docker-compose.nodomain.yml`
 - `prod_config/docker-compose.domain.yml`
@@ -167,6 +191,17 @@ Este documento recoge los cambios relevantes realizados durante el desarrollo de
 
 ---
 
-### 13) Nota final
+### 15) Correcciones de la revisión backend
 
-Este changelog recoge los cambios realizados hasta el momento de forma práctica y orientada al proyecto real. La rama de trabajo se ha centrado en dejar la aplicación usable localmente, con datos de prueba, TimescaleDB activo, la hypertable `vulnerability_events` creada, eventos emitidos desde la sincronización y funciones PL/pgSQL usadas por la API. El siguiente paso es completar la paginación server-side y adaptar el Dashboard y el Timeline al nuevo contrato.
+- `GET /vulns` ahora filtra en servidor por `agent_name`, `package_name`, `cve_id`, `tags`, `severity`, `status`, `score_min` y `score_max`; los valores múltiples se envían repetidos y `severity`/`status` no distinguen mayúsculas.
+- Se añadió orden server-side con `sort_by`/`sort_dir` para las columnas del Dashboard, incluyendo `connection_name`, severidad, score, tiempos y tags. Un campo inválido devuelve `422`.
+- `search` escapa `%`, `_` y `\`, por lo que estos caracteres se buscan literalmente en vez de actuar como comodines SQL.
+- La sincronización toma un `pg_advisory_xact_lock` por conexión en PostgreSQL. Dos syncs simultáneos de la misma conexión se serializan y el segundo vuelve a leer el estado ya confirmado, evitando eventos duplicados o inserciones en conflicto.
+- Se añadieron tests de filtros avanzados, orden, escape de comodines y persistencia de metadata al crear (`agent_name`, `package_name`/`version`, `severity`, `score_base`, `tags`) y al actualizar (`severity`, `score_base`, `tags`, `agent_name`).
+- Verificación: 72 tests de SQLite pasan en el contenedor `devsecops-api`. En un PostgreSQL 15 temporal se validaron el filtro de tags, el orden por longitud de tags y el bloqueo/liberación de `pg_advisory_xact_lock` entre dos sesiones.
+
+---
+
+### 16) Nota final
+
+Este changelog recoge los cambios realizados hasta el momento de forma práctica y orientada al proyecto real. La rama de trabajo se ha centrado en dejar la aplicación usable localmente, con datos de prueba, TimescaleDB activo, la hypertable `vulnerability_events` creada, eventos emitidos desde la sincronización, funciones PL/pgSQL usadas por la API y el backend de Fase 2 con paginación server-side. El siguiente paso es adaptar el Dashboard, Timeline y etiquetas al contrato documentado en `docs/FRONTEND_API_NOTES.md`.

@@ -39,20 +39,21 @@ confiable automáticamente por el navegador.
 
 ### Cargar datos de prueba Wazuh
 
-El archivo `vuln-api/app/datos_wazuh.json` contiene los datos de prueba. La imagen
-de la API ya incluye el importador y carga
-automáticamente el `.env` de la raíz. Después de levantar la base de datos,
-ejecútalo desde la raíz del repositorio:
+El archivo `vuln-api/app/datos_wazuh.json` contiene los datos de prueba. El
+loader usa las dependencias de la imagen de la API y la red de Compose. Con la
+base de datos levantada, ejecútalo desde la raíz del repositorio:
 
 ```bash
-python vuln-api/app/load-data.py --replace
+docker compose run --rm --no-deps -v "$PWD:/repo" -w /repo api \
+  python frontend/tools-bd/load-data.py --replace
 ```
 
 `--replace` reemplaza las vulnerabilidades, conexiones, historial e
 interacciones del seed; no elimina usuarios. Para cargar otro archivo JSON:
 
 ```bash
-python vuln-api/app/load-data.py /ruta/al/archivo.json --replace
+docker compose run --rm --no-deps -v "$PWD:/repo" -v "/ruta/al:/data:ro" \
+  -w /repo api python frontend/tools-bd/load-data.py /data/archivo.json --replace
 ```
 
 En el entorno local Docker, el seed se carga automáticamente al iniciar la API

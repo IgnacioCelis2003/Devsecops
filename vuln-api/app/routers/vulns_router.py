@@ -1,7 +1,20 @@
 # app/routers/vulns_router.py
 from datetime import datetime, timezone
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import BigInteger, DateTime, Integer, String, Text, column, func, select
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    case,
+    column,
+    exists,
+    func,
+    or_,
+    select,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -49,9 +62,22 @@ def sync_all_connections(
 
 @router.get("")
 def list_vulns(
-    offset: int = 0,
-    limit: int = 50,
-    connection_id: int = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    connection_id: int | None = None,
+    agent_name: list[str] | None = Query(None),
+    package_name: list[str] | None = Query(None),
+    cve_id: list[str] | None = Query(None),
+    tags: list[str] | None = Query(None),
+    severity: list[str] | None = Query(None),
+    status: list[str] | None = Query(None),
+    score_min: float | None = Query(None, ge=0, le=10),
+    score_max: float | None = Query(None, ge=0, le=10),
+    search: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    sort_by: str = Query("last_seen"),
+    sort_dir: Literal["asc", "desc"] = Query("desc"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_enforcing_password_change),
 ):
@@ -79,70 +105,177 @@ def list_vulns(
             / 86400.0
         ).label("total_age_days")
 
-    query = db.query(
-        WazuhVulnerability,
-        dwell_time_expression,
-        age_expression,
-    ).options(
-        joinedload(WazuhVulnerability.connection),
-        selectinload(WazuhVulnerability.history),
-    )
+    filters = []
     if connection_id is not None:
-        query = query.filter(WazuhVulnerability.connection_id == connection_id)
-    query = query.order_by(
-        WazuhVulnerability.last_seen.desc(),
-        WazuhVulnerability.id.desc(),
-    ).offset(offset)
-    if limit is not None:
-        query = query.limit(limit)
-    results = query.all()
-    return [
-        {
-            "id": v.id,
-            "connection_id": v.connection_id,
-            "connection_name": v.connection.name if v.connection else None,
-            "status": v.status,
-            "agent_id": v.agent_id,
-            "agent_name": v.agent_name,
-            "tags": v.tags or [],
-            "os_full": v.os_full,
-            "os_platform": v.os_platform,
-            "os_version": v.os_version,
-            "package_name": v.package_name,
-            "package_version": v.package_version,
-            "package_type": v.package_type,
-            "package_arch": v.package_arch,
-            "cve_id": v.cve_id,
-            "severity": v.severity,
-            "score_base": float(v.score_base) if v.score_base else None,
-            "score_version": v.score_version,
-            "detected_at": v.detected_at,
-            "published_at": v.published_at,
-            "description": v.description,
-            "reference": v.reference,
-            "scanner_vendor": v.scanner_vendor,
-            "first_seen": v.first_seen,
-            "last_seen": v.last_seen,
-            "dwell_time_days": float(dwell) if dwell is not None else None,
-            "total_age_days": float(age) if age is not None else None,
-            "history": [
-                {
-                    "id": h.id,
-                    "action": h.action,
-                    "details": h.details,
-                    "timestamp": h.timestamp,
-                }
-                for h in sorted(v.history, key=lambda h: h.timestamp)
-            ],
-        }
-        for v, dwell, age in results
-    ]
+        filters.append(WazuhVulnerability.connection_id == connection_id)
+    if agent_name:
+        filters.append(WazuhVulnerability.agent_name.in_(agent_name))
+    if package_name:
+        filters.append(WazuhVulnerability.package_name.in_(package_name))
+    if cve_id:
+        filters.append(WazuhVulnerability.cve_id.in_(cve_id))
+    if tags:
+        tag_values = [tag for tag in tags if tag]
+        if tag_values:
+            if engine.dialect.name == "postgresql":
+                tag_table = func.json_array_elements_text(
+                    WazuhVulnerability.tags
+                ).table_valued("value").alias("tag")
+            else:
+                tag_table = func.json_each(
+                    WazuhVulnerability.tags
+                ).table_valued("value").alias("tag")
+            filters.append(
+                exists(
+                    select(1)
+                    .select_from(tag_table)
+                    .where(tag_table.c.value.in_(tag_values))
+                )
+            )
+    if severity:
+        severity_values = [value.lower() for value in severity if value]
+        if severity_values:
+            filters.append(func.lower(WazuhVulnerability.severity).in_(severity_values))
+    if status:
+        status_values = [value.lower() for value in status if value]
+        if status_values:
+            filters.append(func.lower(WazuhVulnerability.status).in_(status_values))
+    if score_min is not None:
+        filters.append(WazuhVulnerability.score_base >= score_min)
+    if score_max is not None:
+        filters.append(WazuhVulnerability.score_base <= score_max)
+    if search and search.strip():
+        term = f"%{_escape_like(search.strip())}%"
+        filters.append(
+            or_(
+                WazuhVulnerability.cve_id.ilike(term, escape="\\"),
+                WazuhVulnerability.agent_id.ilike(term, escape="\\"),
+                WazuhVulnerability.agent_name.ilike(term, escape="\\"),
+                WazuhVulnerability.package_name.ilike(term, escape="\\"),
+                WazuhVulnerability.description.ilike(term, escape="\\"),
+            )
+        )
+    date_from = _as_utc(date_from)
+    date_to = _as_utc(date_to)
+    if date_from is not None:
+        filters.append(WazuhVulnerability.detected_at >= date_from)
+    if date_to is not None:
+        filters.append(WazuhVulnerability.detected_at < date_to)
+
+    severity_rank = case(
+        (func.lower(WazuhVulnerability.severity) == "critical", 4),
+        (func.lower(WazuhVulnerability.severity) == "high", 3),
+        (func.lower(WazuhVulnerability.severity) == "medium", 2),
+        (func.lower(WazuhVulnerability.severity) == "low", 1),
+        else_=0,
+    )
+    connection_name = (
+        select(WazuhConnection.name)
+        .where(WazuhConnection.id == WazuhVulnerability.connection_id)
+        .scalar_subquery()
+    )
+    sort_columns = {
+        "last_seen": WazuhVulnerability.last_seen,
+        "first_seen": WazuhVulnerability.first_seen,
+        "detected_at": WazuhVulnerability.detected_at,
+        "published_at": WazuhVulnerability.published_at,
+        "severity": severity_rank,
+        "score_base": WazuhVulnerability.score_base,
+        "cve_id": WazuhVulnerability.cve_id,
+        "status": WazuhVulnerability.status,
+        "agent_name": WazuhVulnerability.agent_name,
+        "agent_id": WazuhVulnerability.agent_id,
+        "package_name": WazuhVulnerability.package_name,
+        "package_arch": WazuhVulnerability.package_arch,
+        "os_full": func.coalesce(
+            WazuhVulnerability.os_full,
+            WazuhVulnerability.os_platform,
+            "",
+        ),
+        "scanner_vendor": WazuhVulnerability.scanner_vendor,
+        "connection_name": connection_name,
+        "dwell_time_days": dwell_time_expression,
+        "total_age_days": age_expression,
+        "tags": func.json_array_length(WazuhVulnerability.tags),
+    }
+    order_column = sort_columns.get(sort_by)
+    if order_column is None:
+        raise HTTPException(status_code=422, detail="sort_by inválido")
+    order = order_column.asc() if sort_dir == "asc" else order_column.desc()
+
+    total = db.query(WazuhVulnerability).filter(*filters).count()
+    results = (
+        db.query(
+            WazuhVulnerability,
+            dwell_time_expression,
+            age_expression,
+        )
+        .options(
+            joinedload(WazuhVulnerability.connection),
+            selectinload(WazuhVulnerability.history),
+        )
+        .filter(*filters)
+        .order_by(order, WazuhVulnerability.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {
+                "id": v.id,
+                "connection_id": v.connection_id,
+                "connection_name": v.connection.name if v.connection else None,
+                "status": v.status,
+                "agent_id": v.agent_id,
+                "agent_name": v.agent_name,
+                "tags": v.tags or [],
+                "os_full": v.os_full,
+                "os_platform": v.os_platform,
+                "os_version": v.os_version,
+                "package_name": v.package_name,
+                "package_version": v.package_version,
+                "package_type": v.package_type,
+                "package_arch": v.package_arch,
+                "cve_id": v.cve_id,
+                "severity": v.severity,
+                "score_base": float(v.score_base) if v.score_base else None,
+                "score_version": v.score_version,
+                "detected_at": v.detected_at,
+                "published_at": v.published_at,
+                "description": v.description,
+                "reference": v.reference,
+                "scanner_vendor": v.scanner_vendor,
+                "first_seen": v.first_seen,
+                "last_seen": v.last_seen,
+                "dwell_time_days": float(dwell) if dwell is not None else None,
+                "total_age_days": float(age) if age is not None else None,
+                "history": [
+                    {
+                        "id": h.id,
+                        "action": h.action,
+                        "details": h.details,
+                        "timestamp": h.timestamp,
+                    }
+                    for h in sorted(v.history, key=lambda h: h.timestamp)
+                ],
+            }
+            for v, dwell, age in results
+        ],
+    }
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
     if value is not None and value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _serialize_event(event: VulnerabilityEvent) -> dict:

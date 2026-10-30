@@ -1,7 +1,7 @@
 # Plan de implementación TimescaleDB — VulnApp
 
-> Estado: Fases 0 y 1 completadas. Fase 2 parcial: eventos, funciones y endpoints listos. La paginación server-side y el frontend quedan fuera del alcance de este rol.
-> Última actualización: 2026-10-28
+> Estado: Fases 0 y 1 completadas. Fase 2 backend completada; la adaptación del frontend queda pendiente y su contrato está en `docs/FRONTEND_API_NOTES.md`.
+> Última actualización: 2026-10-29
 
 ## Decisiones acordadas
 
@@ -13,7 +13,8 @@
 - Se conservan todos los datos: no se crearán políticas de retención, compresión ni agregados continuos, y no se fijará un intervalo de chunk explícito. Se usará el valor por defecto de TimescaleDB.
 - No se implementará un guard automático de limpieza de BD. Los scripts de `db-init` solo se ejecutan con el volumen vacío; el runbook documentará que hay que recrear el volumen cuando cambie el esquema.
 - Si en el futuro se necesita preservar datos o actualizar sin recrear la BD, se evaluará introducir Alembic usando este esquema SQL como baseline.
-- Reparto de trabajo: este rol cubre la base de datos y su integración mínima con la API. El cambio de contrato de `GET /vulns`, la paginación server-side del Dashboard y la adaptación completa del Timeline quedan para el integrante de frontend.
+- Reparto de trabajo: el backend de Fase 2 quedó implementado; la adaptación del Dashboard, Timeline y etiquetas queda para el integrante de frontend usando `docs/FRONTEND_API_NOTES.md`.
+- Para la carga objetivo de 25k no se requiere un cambio arquitectónico: la paginación server-side y el upsert masivo de Fase 2 cubren el caso. La validación con `EXPLAIN (ANALYZE, BUFFERS)` se añade a Fase 4; si la función de eventos sigue siendo el cuello de botella, se evaluará empujar los filtros y el límite a SQL.
 
 ## Fase 0 — Activación de TimescaleDB (completada)
 
@@ -94,21 +95,23 @@
 - [x] Confirmar que la API arranca y que el seed funciona.
 - [x] Ejecutar tests con SQLite para verificar que no se rompió el camino de tests.
 
-## Fase 2 — Backend, API y sincronización (parcial)
+## Fase 2 — Backend, API y sincronización (backend completado)
 
-- [ ] Reemplazar el bucle de sincronización por upsert masivo (`INSERT ... ON CONFLICT DO UPDATE`). La carga actual ya evita el N+1 con una sola consulta y `add_all`, pero las actualizaciones siguen pasando por el ORM.
+- [x] Reemplazar las actualizaciones por ORM del bucle de sincronización por un lote `bulk_update_mappings`; las inserciones nuevas siguen usando un único `add_all` + `flush`.
 - [x] Emitir eventos en `vulnerability_events` para `DETECTED`, `REOPENED`, `RESOLVED` y `SEVERITY_CHANGED`.
 - [x] Evitar eventos duplicados en sincronizaciones repetidas.
-- [ ] Cambiar `GET /vulns` a paginación server-side:
-  - `page`, `page_size`, `connection_id`, `severity`, `status`, `search`, `date_from`, `date_to`
+- [x] Cambiar `GET /vulns` a paginación server-side:
+  - `page` (`>= 1`, por defecto `1`) y `page_size` (`1..500`, por defecto `50`)
+  - `connection_id`, `severity`, `status`, `search`, `date_from`, `date_to`
+  - `date_from`/`date_to` filtran `detected_at`; el rango es `[date_from, date_to)`
   - respuesta `{total, page, page_size, items}`
-- [ ] Quitar el historial embebido de `GET /vulns`.
+- [x] Mantener el historial embebido en cada item de `GET /vulns` paginado, para que la Timeline lo consuma sin N+1.
 - [x] Crear `GET /vulns/{id}/history`.
 - [x] Crear `GET /vulns/events` para la Timeline con filtros por rango.
 - [x] Usar las funciones PL/pgSQL para dwell time y edad.
 - [x] Actualizar el seed para generar eventos e historial.
-- [ ] Corregir `README.md:48` y el import de `frontend/tools-bd/load-data.py`.
-- [ ] Coordinar con frontend el nuevo contrato de Dashboard y Timeline.
+- [x] Corregir `README.md:48` y el import de `frontend/tools-bd/load-data.py`.
+- [x] Coordinar con frontend el nuevo contrato de Dashboard y Timeline en `docs/FRONTEND_API_NOTES.md`.
 
 ## Fase 3 — Operación y despliegue
 
@@ -128,6 +131,7 @@
 - [ ] Verificar desde BD vacía: extensión, tablas, hypertable, índices, funciones y políticas.
 - [ ] Probar paginación, filtros, historial y timeline.
 - [ ] Probar que el sync sea idempotente.
+- [ ] Medir sync y `GET /vulns` con 25k registros usando `EXPLAIN (ANALYZE, BUFFERS)`; optimizar `fn_vulnerability_events_in_range` si el plan lo requiere.
 - [ ] Añadir TimescaleDB como servicio en GitHub Actions.
 - [ ] Aplicar `db-init/10-init.sql` en CI antes de pytest.
 - [ ] Mantener SQLite solo para unit tests rápidos.
@@ -144,8 +148,8 @@
 - [ ] Un volumen vacío levanta extensión, tablas, hypertable, índices y funciones.
 - [ ] `timescaledb_information.hypertables` muestra `vulnerability_events`.
 - [ ] Las funciones `fn_*` existen y se usan desde la API.
-- [ ] `GET /vulns` pagina y filtra en servidor.
-- [ ] `GET /vulns/{id}/history` y `GET /vulns/events` funcionan.
+- [x] `GET /vulns` pagina y filtra en servidor.
+- [x] `GET /vulns/{id}/history` y `GET /vulns/events` funcionan.
 - [ ] El sync es idempotente y no genera eventos duplicados.
 - [ ] La API está healthy y los tests de integración pasan.
 - [ ] El procedimiento de despliegue y reset está documentado.
@@ -153,7 +157,7 @@
 ## Decisiones pendientes
 
 - [ ] Definir estrategia SSL para domain (Fase 3).
-- [ ] Definir contrato final de filtros y respuesta con frontend (Fase 2).
+- [x] Definir contrato final de filtros y respuesta con frontend (`docs/FRONTEND_API_NOTES.md`).
 - [ ] Evaluar tabla `schema_version` para detectar esquemas desactualizados.
 - [ ] Confirmar si `vulnerability_history` se mantiene indefinidamente como auditoría.
 

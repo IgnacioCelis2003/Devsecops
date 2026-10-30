@@ -1,8 +1,18 @@
 from datetime import datetime, timezone
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..models import VulnerabilityEvent, VulnerabilityHistory, WazuhVulnerability
+
+
+def _acquire_sync_lock(db: Session, conn_id: int) -> None:
+    # Serialize syncs per connection; the transaction lock is held until commit.
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"),
+            {"key": conn_id},
+        )
 
 
 def _extract_wazuh_tags(vuln: dict) -> list[str]:
@@ -83,12 +93,15 @@ def normalize_wazuh_vulnerabilities(raw_vulns: list[dict]) -> list[dict]:
 def _handle_existing_vuln(
     existing: WazuhVulnerability,
     vuln: dict,
+    tags: list[str],
+    agent_name: str | None,
     history_rows: list[VulnerabilityHistory],
     event_rows: list[VulnerabilityEvent],
+    updates: list[dict],
+    now: datetime,
 ) -> None:
-    if existing.status == "RESOLVED":
-        previous_status = existing.status
-        existing.status = "ACTIVE"
+    new_status = existing.status
+    if new_status == "RESOLVED":
         history_rows.append(
             VulnerabilityHistory(
                 vulnerability_id=existing.id,
@@ -105,24 +118,23 @@ def _handle_existing_vuln(
                 cve_id=existing.cve_id,
                 severity=existing.severity,
                 status="ACTIVE",
-                details={"previous_status": previous_status},
+                details={"previous_status": existing.status},
             )
         )
+        new_status = "ACTIVE"
 
     new_severity = vuln.get("severity")
     if existing.severity != new_severity:
-        previous_severity = existing.severity
         history_rows.append(
             VulnerabilityHistory(
                 vulnerability_id=existing.id,
                 action="SEVERITY_CHANGED",
                 details=(
-                    f"Severidad cambió de {previous_severity} "
+                    f"Severidad cambió de {existing.severity} "
                     f"a {new_severity}"
                 ),
             )
         )
-        existing.severity = new_severity
         event_rows.append(
             VulnerabilityEvent(
                 event_type="SEVERITY_CHANGED",
@@ -131,16 +143,25 @@ def _handle_existing_vuln(
                 agent_id=existing.agent_id,
                 cve_id=existing.cve_id,
                 severity=new_severity,
-                status=existing.status,
+                status=new_status,
                 details={
-                    "old_severity": previous_severity,
+                    "old_severity": existing.severity,
                     "new_severity": new_severity,
                 },
             )
         )
 
-    existing.score_base = (vuln.get("score") or {}).get("base")
-    existing.last_seen = datetime.now(timezone.utc)
+    updates.append(
+        {
+            "id": existing.id,
+            "status": new_status,
+            "severity": new_severity,
+            "score_base": (vuln.get("score") or {}).get("base"),
+            "tags": tags,
+            "agent_name": agent_name,
+            "last_seen": now,
+        }
+    )
 
 
 def process_wazuh_vulnerabilities(
@@ -148,6 +169,7 @@ def process_wazuh_vulnerabilities(
     conn_id: int,
     raw_vulns: list,
 ) -> int:
+    _acquire_sync_lock(db, conn_id)
     normalized_vulns = normalize_wazuh_vulnerabilities(raw_vulns)
     unique_vulns = {}
     for item in normalized_vulns:
@@ -180,6 +202,8 @@ def process_wazuh_vulnerabilities(
     new_rows = []
     history_rows = []
     event_rows = []
+    updates = []
+    now = datetime.now(timezone.utc)
 
     for item in normalized_vulns:
         vulnerability = item["vulnerability"]
@@ -194,10 +218,15 @@ def process_wazuh_vulnerabilities(
         existing = existing_by_key.get(key)
 
         if existing is not None:
-            existing.tags = item["tags"]
-            existing.agent_name = item["agent_name"]
             _handle_existing_vuln(
-                existing, vulnerability, history_rows, event_rows
+                existing,
+                vulnerability,
+                item["tags"],
+                item["agent_name"],
+                history_rows,
+                event_rows,
+                updates,
+                now,
             )
             continue
 
@@ -266,7 +295,7 @@ def process_wazuh_vulnerabilities(
             row.cve_id,
         )
         if row.status == "ACTIVE" and key not in seen_keys:
-            row.status = "RESOLVED"
+            updates.append({"id": row.id, "status": "RESOLVED"})
             history_rows.append(
                 VulnerabilityHistory(
                     vulnerability_id=row.id,
@@ -286,6 +315,10 @@ def process_wazuh_vulnerabilities(
                     details={"reason": "not_reported"},
                 )
             )
+
+    if updates:
+        db.bulk_update_mappings(WazuhVulnerability, updates)
+        db.expire_all()
 
     db.add_all(history_rows)
     db.add_all(event_rows)

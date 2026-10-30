@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .crypto import encrypt
@@ -48,6 +49,25 @@ def normalize_tags(value):
 
 def encrypted_password(value: str) -> str:
     return value if value.startswith("gAAAA") else encrypt(value)
+
+
+_SEQUENCE_TABLES = (
+    "wazuh_vulnerabilities",
+    "vulnerability_history",
+    "user_interactions",
+)
+
+
+def _reset_postgres_sequences(session: Session):
+    if engine.dialect.name != "postgresql":
+        return
+    for table in _SEQUENCE_TABLES:
+        session.execute(
+            text(
+                f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+                f"COALESCE((SELECT MAX(id) FROM {table}), 0) + 1, false)"
+            )
+        )
 
 
 def seed_database(json_path: str | Path = DEFAULT_DATA_PATH, replace: bool = False):
@@ -183,5 +203,7 @@ def seed_database(json_path: str | Path = DEFAULT_DATA_PATH, replace: bool = Fal
                     status=status,
                     details={"details": item.get("details")},
                 ))
+
+        _reset_postgres_sequences(session)
 
         session.commit()
