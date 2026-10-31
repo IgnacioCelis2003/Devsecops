@@ -175,9 +175,9 @@
           <div v-if="formUser.role === 'viewer'" class="form-group tag-section-group fade-in">
             <div class="tag-section-header">
               <div>
-                <label class="form-label" style="margin-bottom: 0.15rem;">
+                <span class="form-label" style="margin-bottom: 0.15rem; display: block;">
                   Etiquetas Asignadas (Tags de Wazuh)
-                </label>
+                </span>
                 <span class="helper-text">
                   Selecciona los cuadros de tags que este usuario tendrá autorización de visualizar:
                 </span>
