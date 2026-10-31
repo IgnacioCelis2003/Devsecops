@@ -1181,5 +1181,21 @@ describe('Dashboard.vue', () => {
             // isRecentlySeen within 60 mins
             expect(wrapper.vm.isRecentlySeen(new Date().toISOString())).toBe(true)
         })
+
+        it('tests getStatusBadgeClass and non-admin syncVulns guard', async () => {
+            localStorage.setItem('role', 'viewer')
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            expect(wrapper.vm.getStatusBadgeClass('ACTIVE')).toBe('status-active')
+            expect(wrapper.vm.getStatusBadgeClass('RESOLVED')).toBe('status-resolved')
+            expect(wrapper.vm.getStatusBadgeClass('MITIGATED')).toBe('status-mitigated')
+            expect(wrapper.vm.getStatusBadgeClass('IN_REVIEW')).toBe('status-in-review')
+            expect(wrapper.vm.getStatusBadgeClass('OTHER')).toBe('status-active')
+            expect(wrapper.vm.getStatusBadgeClass('')).toBe('status-active')
+
+            await wrapper.vm.syncVulns()
+            expect(wrapper.vm.error).toContain('Solo los administradores tienen permiso')
+        })
     })
 })

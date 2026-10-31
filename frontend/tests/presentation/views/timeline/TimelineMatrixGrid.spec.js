@@ -365,5 +365,19 @@ describe('TimelineMatrixGrid.vue', () => {
     wrapper.vm.applyYearInput()
     expect(wrapper.vm.selectedYear).toBe(2026)
   })
-})
 
+  it('handles onEndDateChange with diff out of range and empty shiftDays', () => {
+    const wrapper = mount(TimelineMatrixGrid, {
+      props: defaultProps
+    })
+
+    wrapper.vm.rangeEndDate = '2026-03-01'
+    wrapper.vm.rangeStartDate = '2026-05-01'
+    wrapper.vm.onEndDateChange()
+    expect(wrapper.vm.rangeStartDate).toBe('2026-01-30')
+
+    wrapper.vm.rangeStartDate = ''
+    wrapper.vm.rangeEndDate = ''
+    expect(wrapper.vm.shiftDays('', 5)).toBe('')
+  })
+})
