@@ -38,6 +38,7 @@ RUN npm run test:coverage
 EOF
 
                         docker build -t frontend-test-img -f frontend/Dockerfile.test frontend/
+                        rm -f frontend/Dockerfile.test
 
                         docker rm -f temp-front-tests || true
                         docker create --name temp-front-tests frontend-test-img
@@ -50,7 +51,8 @@ EOF
                         sed -i 's|SF:/app/src/|SF:frontend/src/|g' frontend/coverage/lcov.info
                         sed -i 's|SF:src/|SF:frontend/src/|g' frontend/coverage/lcov.info
                         
-                        docker compose build frontend                    '''
+                        docker compose build frontend
+                    '''
                 }
             }
         }
@@ -129,4 +131,4 @@ EOF
             sh 'docker ps -a'
         }
     }
-} 
+}

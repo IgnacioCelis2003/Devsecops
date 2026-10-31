@@ -29,6 +29,7 @@ vuln-api/.coverage
 frontend/coverage/
 frontend/node_modules/
 frontend/dist/
+frontend/Dockerfile.test
 node_modules/
 
 # TLS/private keys and generated certificates
