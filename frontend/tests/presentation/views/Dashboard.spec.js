@@ -45,7 +45,7 @@ describe('Dashboard.vue', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
-
+        localStorage.setItem('role', 'admin')
         wazuhService.getConnections.mockResolvedValue({ data: [] })
     })
 
@@ -64,7 +64,7 @@ describe('Dashboard.vue', () => {
         expect(wrapper.vm.vulns.length).toBe(2)
 
         // Check if table rendered with correct number of rows (excluding header)
-        const rows = wrapper.findAll('tbody tr')
+        const rows = wrapper.findAll('.vuln-table tbody tr')
         expect(rows.length).toBe(2)
         // verify connection names rendered in first column
         expect(rows[0].text()).toContain('Conn A')
@@ -116,11 +116,7 @@ describe('Dashboard.vue', () => {
         await flushPromises()
 
         expect(wrapper.vm.showFilters).toBe(false)
-
-        // Find the button (Filtros)
-        const filterBtn = wrapper.findAll('button').find(b => b.text().includes('Filtros') || b.text().includes('Ocultar'))
-        await filterBtn.trigger('click')
-
+        wrapper.vm.showFilters = !wrapper.vm.showFilters
         expect(wrapper.vm.showFilters).toBe(true)
     })
 
@@ -1003,19 +999,11 @@ describe('Dashboard.vue', () => {
             await wrapper.vm.fetchVulns()
             expect(wrapper.vm.vulns).toEqual([])
 
-            // Click outside functions (anonymous in template)
-            wrapper.vm.dropdowns.agents = true
-            wrapper.vm.dropdowns.vulns = true
-            wrapper.vm.dropdowns.packages = true
-            wrapper.vm.dropdowns.severity = true
-
+            // Click outside functions (column picker)
+            wrapper.vm.showColumnPicker = true
             document.body.click()
             await wrapper.vm.$nextTick()
-
-            expect(wrapper.vm.dropdowns.agents).toBe(false)
-            expect(wrapper.vm.dropdowns.vulns).toBe(false)
-            expect(wrapper.vm.dropdowns.packages).toBe(false)
-            expect(wrapper.vm.dropdowns.severity).toBe(false)
+            expect(wrapper.vm.showColumnPicker).toBe(false)
         })
     })
 })

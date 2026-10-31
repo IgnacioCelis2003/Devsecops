@@ -148,7 +148,7 @@ describe('App.vue', () => {
     })
 
     const configWazuhLink = wrapper.findAll('.nav-item').find(el =>
-      el.text().includes('Administar conexiones Wazuh')
+      el.text().includes('Administrar conexiones Wazuh')
     )
 
     await configWazuhLink.trigger('click')
@@ -193,9 +193,9 @@ describe('App.vue', () => {
     expect(wrapper.text()).toContain('clau')
 })
 
-  it('shows route title for Timeline', () => {
-    mockRoute.name = 'Timeline'
-    mockRoute.path = '/timeline'
+  it('shows route title for Dashboard', () => {
+    mockRoute.name = 'Dashboard'
+    mockRoute.path = '/dashboard'
 
     const wrapper = mount(App, {
       global: {
@@ -203,7 +203,7 @@ describe('App.vue', () => {
       }
     })
 
-    expect(wrapper.find('.header-title').text()).toBe('Linea de tiempo')
+    expect(wrapper.find('.header-title').text()).toBe('Vulnerabilidades Wazuh')
   })
 
   it('shows route title for ConfigWazuh', () => {

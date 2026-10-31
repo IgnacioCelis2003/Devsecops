@@ -51,7 +51,7 @@ describe('ConfigUser.vue', () => {
 
         await flushPromises()
 
-        expect(wrapper.vm.usersError).toBe('No se pudieron cargar los administradores.')
+        expect(wrapper.vm.usersError).toBe('No se pudieron cargar los usuarios.')
         expect(wrapper.vm.users.length).toBe(0)
     })
 
@@ -61,12 +61,12 @@ describe('ConfigUser.vue', () => {
 
         // Open modal
         await wrapper.find('.btn-primary').trigger('click')
-        expect(wrapper.vm.showAddModal).toBe(true)
+        expect(wrapper.vm.showModal).toBe(true)
 
         // Close modal via Cancel button
         const cancelBtn = wrapper.findAll('.btn-outline').find(b => b.text().includes('Cancelar'))
         await cancelBtn.trigger('click')
-        expect(wrapper.vm.showAddModal).toBe(false)
+        expect(wrapper.vm.showModal).toBe(false)
     })
 
     it('submits new user correctly', async () => {
@@ -75,8 +75,8 @@ describe('ConfigUser.vue', () => {
 
         await wrapper.find('.btn-primary').trigger('click')
 
-        wrapper.vm.newUser.username = 'new_admin'
-        wrapper.vm.newUser.password = 'SuperSecret123'
+        wrapper.vm.formUser.username = 'new_admin'
+        wrapper.vm.formUser.password = 'SuperSecret123'
 
         userService.createUser.mockResolvedValueOnce({})
 
@@ -85,9 +85,11 @@ describe('ConfigUser.vue', () => {
 
         expect(userService.createUser).toHaveBeenCalledWith({
             username: 'new_admin',
-            password: 'SuperSecret123'
+            password: 'SuperSecret123',
+            role: 'viewer',
+            tags: []
         })
-        expect(wrapper.vm.showAddModal).toBe(false)
+        expect(wrapper.vm.showModal).toBe(false)
         expect(userService.getUsers).toHaveBeenCalledTimes(2) // 1 initial, 1 after add
     })
 
@@ -97,8 +99,8 @@ describe('ConfigUser.vue', () => {
 
         await wrapper.find('.btn-primary').trigger('click')
 
-        wrapper.vm.newUser.username = ''
-        wrapper.vm.newUser.password = ''
+        wrapper.vm.formUser.username = ''
+        wrapper.vm.formUser.password = ''
 
         await wrapper.find('form').trigger('submit.prevent')
 
@@ -111,8 +113,8 @@ describe('ConfigUser.vue', () => {
         await flushPromises()
 
         await wrapper.find('.btn-primary').trigger('click')
-        wrapper.vm.newUser.username = 'fail_user'
-        wrapper.vm.newUser.password = 'pass'
+        wrapper.vm.formUser.username = 'fail_user'
+        wrapper.vm.formUser.password = 'pass'
 
         userService.createUser.mockRejectedValueOnce({ response: { data: { detail: 'User exists' } } })
 
@@ -120,7 +122,7 @@ describe('ConfigUser.vue', () => {
         await flushPromises()
 
         expect(wrapper.vm.error).toBe('User exists')
-        expect(wrapper.vm.showAddModal).toBe(true) // Should remain open
+        expect(wrapper.vm.showModal).toBe(true) // Should remain open
     })
 
     it('deletes user successfully after confirmation', async () => {
