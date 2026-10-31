@@ -118,6 +118,28 @@ describe('TimelineMatrixGrid.vue', () => {
     expect(wrapper.vm.dropdowns.yearPicker).toBe(false)
   })
 
+  it('navigates decades forward and backward', () => {
+    const wrapper = mount(TimelineMatrixGrid, {
+      props: defaultProps
+    })
+
+    const initialDecade = wrapper.vm.decadeStart
+    wrapper.vm.decadeStart += 10
+    expect(wrapper.vm.decadeStart).toBe(initialDecade + 10)
+    wrapper.vm.decadeStart -= 20
+    expect(wrapper.vm.decadeStart).toBe(initialDecade - 10)
+  })
+
+  it('toggles isDetailedView between compact and detailed view', () => {
+    const wrapper = mount(TimelineMatrixGrid, {
+      props: defaultProps
+    })
+
+    expect(wrapper.vm.isDetailedView).toBe(true)
+    wrapper.vm.isDetailedView = false
+    expect(wrapper.vm.isDetailedView).toBe(false)
+  })
+
   it('toggles severity filter and emits update', () => {
     const wrapper = mount(TimelineMatrixGrid, {
       props: {

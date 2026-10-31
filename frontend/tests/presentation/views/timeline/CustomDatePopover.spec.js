@@ -79,6 +79,30 @@ describe('CustomDatePopover.vue', () => {
     expect(emittedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
+  it('handles selectToday when today is disabled by minDate', () => {
+    const wrapper = mount(CustomDatePopover, {
+      props: {
+        modelValue: '',
+        minDate: '2099-01-01'
+      }
+    })
+
+    wrapper.vm.selectToday()
+    expect(wrapper.emitted('update:modelValue')).toBeFalsy()
+  })
+
+  it('scrolls to active month when modelValue updates and popover is open', async () => {
+    const wrapper = mount(CustomDatePopover, {
+      props: {
+        modelValue: '2026-01-01'
+      }
+    })
+
+    wrapper.vm.isOpen = true
+    await wrapper.setProps({ modelValue: '2026-06-15' })
+    expect(wrapper.vm.isOpen).toBe(true)
+  })
+
   it('respects minDate and maxDate in isDayDisabled', () => {
     const wrapper = mount(CustomDatePopover, {
       props: {

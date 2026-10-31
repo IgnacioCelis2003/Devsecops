@@ -399,6 +399,29 @@ def test_delete_nonexistent_user(client, db_session):
     assert client.delete("/users/9999", headers=_get_headers(client)).status_code == 404
 
 
+def test_update_user(client, db_session):
+    _create_user(db_session)
+    headers = _get_headers(client)
+    client.post("/users", json={"username": "toupdate", "password": "x"}, headers=headers)
+    users = client.get("/users", headers=headers).json()
+    target_id = next(u["id"] for u in users if u["username"] == "toupdate")
+
+    # Update role, tags, is_active
+    res = client.put(f"/users/{target_id}", json={"role": "viewer", "tags": ["prod"], "is_active": True}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["message"] == "Usuario actualizado exitosamente"
+
+    # Verify updated values
+    updated_users = client.get("/users", headers=headers).json()
+    updated = next(u for u in updated_users if u["id"] == target_id)
+    assert updated["role"] == "viewer"
+    assert updated["tags"] == ["prod"]
+
+    # 404 for non-existent user
+    assert client.put("/users/9999", json={"role": "viewer"}, headers=headers).status_code == 404
+
+
+
 # wazuh connections
 
 def test_list_connections_empty(client, db_session):

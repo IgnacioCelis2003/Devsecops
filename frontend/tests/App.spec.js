@@ -205,6 +205,31 @@ describe('App.vue', () => {
         expect(adminUsersLink).toBeUndefined()
     })
 
+    it('toggles user menu dropdown in header and handles navigation and logout', async () => {
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
+          }
+        })
+
+        expect(wrapper.vm.userMenuOpen).toBe(false)
+        await wrapper.find('.avatar').trigger('click')
+        expect(wrapper.vm.userMenuOpen).toBe(true)
+
+        // Click change password in dropdown
+        const cpBtn = wrapper.find('.user-dropdown-item')
+        await cpBtn.trigger('click')
+        expect(mockPush).toHaveBeenCalledWith('/change-password')
+        expect(wrapper.vm.userMenuOpen).toBe(false)
+
+        // Open again and click logout
+        await wrapper.find('.user-info').trigger('click')
+        expect(wrapper.vm.userMenuOpen).toBe(true)
+        const logoutDdBtn = wrapper.find('.logout-dd-btn')
+        await logoutDdBtn.trigger('click')
+        expect(mockPush).toHaveBeenCalledWith('/login')
+    })
+
     it('shows route title for Dashboard', () => {
         mockRoute.name = 'Dashboard'
         mockRoute.path = '/dashboard'
@@ -244,7 +269,7 @@ describe('App.vue', () => {
         expect(wrapper.find('.header-title').text()).toBe('Seguridad de Cuenta')
     })
 
-    it('shows route title for NotFound', () => {
+    it('computes route title for NotFound', () => {
         mockRoute.name = 'NotFound'
         mockRoute.path = '/404'
 
@@ -254,7 +279,7 @@ describe('App.vue', () => {
           }
         })
 
-        expect(wrapper.find('.auth-layout').exists()).toBe(true)
+        expect(wrapper.vm.currentRouteName).toBe('Página no encontrada')
     })
 
     it('returns empty title for unknown route', () => {
