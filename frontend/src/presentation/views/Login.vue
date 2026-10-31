@@ -76,6 +76,10 @@ const handleLogin = async () => {
     const userMeRes = await userService.getUserMe()
     const user = userMeRes.data
 
+    if (user.role) {
+      localStorage.setItem('role', user.role)
+    }
+
     // mostrar el valor de is_default_password para verificar
     console.log('Is default password:', user.is_default_password) // Debug log
     if (user.is_default_password) {

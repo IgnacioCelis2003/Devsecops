@@ -29,12 +29,14 @@ describe('router/index.js global guard', () => {
     it('allows navigation to auth route with token', async () => {
         localStorage.setItem('token', 'fake-token')
         // 2. Simulamos que el backend responde que el usuario está OK y NO tiene pass por defecto
-        userService.getUserMe.mockResolvedValueOnce({ data: { is_default_password: false } })
+        userService.getUserMe.mockResolvedValueOnce({ data: { is_default_password: false, username: 'testuser', role: 'admin' } })
 
         await router.push('/dashboard')
         await router.isReady()
 
         expect(router.currentRoute.value.path).toBe('/dashboard')
+        expect(localStorage.getItem('username')).toBe('testuser')
+        expect(localStorage.getItem('role')).toBe('admin')
     })
 
     it('redirects to /dashboard if logged in and navigating to /login', async () => {
@@ -81,6 +83,22 @@ describe('router/index.js global guard', () => {
         await router.isReady()
 
         expect(router.currentRoute.value.path).toBe('/change-password')
+    })
+
+    it('redirects to /dashboard with message when non-admin accesses admin route', async () => {
+        localStorage.setItem('token', 'fake-token')
+
+        userService.getUserMe.mockResolvedValue({
+            data: { is_default_password: false, role: 'viewer', username: 'guest' }
+        })
+
+        await router.push('/config-user')
+        await router.isReady()
+
+        expect(router.currentRoute.value.path).toBe('/dashboard')
+        expect(sessionStorage.getItem('access_denied_message')).toBe(
+            'No tienes permisos de administrador para acceder a esta sección.'
+        )
     })
 
     it('redirects to /login and clears storage when getUserMe fails', async () => {

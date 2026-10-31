@@ -1,13 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import App from '@/App.vue'
 import Swal from 'sweetalert2'
+import userService from '@/application/services/userService'
 
 // Mock sweetalert2
 vi.mock('sweetalert2', () => ({
     default: {
         fire: vi.fn()
+    }
+}))
+
+vi.mock('@/application/services/userService', () => ({
+    default: {
+        getUserMe: vi.fn()
     }
 }))
 
@@ -31,6 +38,7 @@ describe('App.vue', () => {
         localStorage.clear()
         mockRoute.name = 'Dashboard'
         mockRoute.path = '/dashboard'
+        userService.getUserMe.mockResolvedValue({ data: null })
     })
 
     it('renders auth layout when on Login route', async () => {
@@ -102,6 +110,7 @@ describe('App.vue', () => {
                 stubs: ['router-view', 'router-link']
             }
         })
+        await flushPromises()
 
         const logoutBtn = wrapper.find('.logout-btn')
         await logoutBtn.trigger('click')
@@ -110,155 +119,179 @@ describe('App.vue', () => {
         expect(localStorage.getItem('username')).toBeNull()
         expect(mockPush).toHaveBeenCalledWith('/login')
     })
-    it('navigates to timeline when clicking timeline link', async () => {
-    const wrapper = mount(App, {
-      global: {
-        stubs: ['router-view', 'router-link']
-      }
-    })
 
-    const timelineLink = wrapper.findAll('.nav-item').find(el =>
-      el.text().includes('Línea de Tiempo')
-    )
-
-    await timelineLink.trigger('click')
-
-    expect(mockPush).toHaveBeenCalledWith('/timeline')
-  })
-
-  it('navigates to config-user when clicking administrar usuarios', async () => {
-    const wrapper = mount(App, {
-      global: {
-        stubs: ['router-view', 'router-link']
-      }
-    })
-
-    const configUserLink = wrapper.findAll('.nav-item').find(el =>
-      el.text().includes('Administrar usuarios')
-    )
-
-    await configUserLink.trigger('click')
-
-    expect(mockPush).toHaveBeenCalledWith('/config-user')
-  })
-
-  it('navigates to config-wazuh when clicking wazuh config link', async () => {
-    const wrapper = mount(App, {
-      global: {
-        stubs: ['router-view', 'router-link']
-      }
-    })
-
-    const configWazuhLink = wrapper.findAll('.nav-item').find(el =>
-      el.text().includes('Administar conexiones Wazuh')
-    )
-
-    await configWazuhLink.trigger('click')
-
-    expect(mockPush).toHaveBeenCalledWith('/config-wazuh')
-  })
-
-  it('renders change-password router-link in sidebar footer', () => {
-    const wrapper = mount(App, {
-      global: {
-        stubs: {
-          'router-view': true,
-          'router-link': {
-            template: '<a class="change-password-link"><slot /></a>'
+    it('does not render separate timeline link as it is unified into dashboard', () => {
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
           }
-        }
-      }
+        })
+
+        const timelineLink = wrapper.findAll('.nav-item').find(el =>
+          el.text().includes('Línea de Tiempo')
+        )
+
+        expect(timelineLink).toBeUndefined()
     })
 
-    expect(wrapper.find('.change-password-link').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Cambiar Contraseña')
-  })
-    
-  it('updates username when route changes and user is authenticated', async () => {
-    localStorage.setItem('token', 'fake-token')
-    localStorage.setItem('username', 'sebastian')
+    it('navigates to config-user when clicking administrar usuarios', async () => {
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
+          }
+        })
 
-    const wrapper = mount(App, {
-        global: {
-        stubs: ['router-view', 'router-link']
-        }
+        const configUserLink = wrapper.findAll('.nav-item').find(el =>
+          el.text().includes('Administrar usuarios')
+        )
+
+        await configUserLink.trigger('click')
+
+        expect(mockPush).toHaveBeenCalledWith('/config-user')
     })
 
-    expect(wrapper.text()).toContain('sebastian')
+    it('navigates to config-wazuh when clicking wazuh config link', async () => {
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
+          }
+        })
 
-    localStorage.setItem('username', 'clau')
-    mockRoute.name = 'Timeline'
-    mockRoute.path = '/timeline'
+        const configWazuhLink = wrapper.findAll('.nav-item').find(el =>
+          el.text().includes('Administrar conexiones Wazuh')
+        )
 
-    await nextTick()
+        await configWazuhLink.trigger('click')
 
-    expect(wrapper.text()).toContain('clau')
-})
-
-  it('shows route title for Timeline', () => {
-    mockRoute.name = 'Timeline'
-    mockRoute.path = '/timeline'
-
-    const wrapper = mount(App, {
-      global: {
-        stubs: ['router-view', 'router-link']
-      }
+        expect(mockPush).toHaveBeenCalledWith('/config-wazuh')
     })
 
-    expect(wrapper.find('.header-title').text()).toBe('Linea de tiempo')
-  })
+    it('renders change-password router-link in sidebar footer', () => {
+        const wrapper = mount(App, {
+          global: {
+            stubs: {
+              'router-view': true,
+              'router-link': {
+                template: '<a class="change-password-link"><slot /></a>'
+              }
+            }
+          }
+        })
 
-  it('shows route title for ConfigWazuh', () => {
-    mockRoute.name = 'ConfigWazuh'
-    mockRoute.path = '/config-wazuh'
+        expect(wrapper.find('.change-password-link').exists()).toBe(true)
+        expect(wrapper.text()).toContain('Cambiar Contraseña')
+    })
+        
+    it('updates username and role from userService.getUserMe when authenticated with token', async () => {
+        localStorage.setItem('token', 'valid-token')
+        userService.getUserMe.mockResolvedValueOnce({
+            data: { username: 'analyst_bob', role: 'viewer' }
+        })
 
-    const wrapper = mount(App, {
-      global: {
-        stubs: ['router-view', 'router-link']
-      }
+        const wrapper = mount(App, {
+            global: {
+                stubs: ['router-view', 'router-link']
+            }
+        })
+
+        await flushPromises()
+
+        expect(wrapper.text()).toContain('analyst_bob')
+        expect(localStorage.getItem('username')).toBe('analyst_bob')
+        expect(localStorage.getItem('role')).toBe('viewer')
+
+        // As a viewer, admin links should not be visible
+        const adminUsersLink = wrapper.findAll('.nav-item').find(el => el.text().includes('Administrar usuarios'))
+        expect(adminUsersLink).toBeUndefined()
     })
 
-    expect(wrapper.find('.header-title').text()).toBe('Configuración de Wazuh')
-  })
+    it('toggles user menu dropdown in header and handles navigation and logout', async () => {
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
+          }
+        })
 
-  it('shows route title for ChangePassword', () => {
-    mockRoute.name = 'ChangePassword'
-    mockRoute.path = '/change-password'
+        expect(wrapper.vm.userMenuOpen).toBe(false)
+        await wrapper.find('.avatar').trigger('click')
+        expect(wrapper.vm.userMenuOpen).toBe(true)
 
-    const wrapper = mount(App, {
-      global: {
-        stubs: ['router-view', 'router-link']
-      }
+        // Click change password in dropdown
+        const cpBtn = wrapper.find('.user-dropdown-item')
+        await cpBtn.trigger('click')
+        expect(mockPush).toHaveBeenCalledWith('/change-password')
+        expect(wrapper.vm.userMenuOpen).toBe(false)
+
+        // Open again and click logout
+        await wrapper.find('.user-info').trigger('click')
+        expect(wrapper.vm.userMenuOpen).toBe(true)
+        const logoutDdBtn = wrapper.find('.logout-dd-btn')
+        await logoutDdBtn.trigger('click')
+        expect(mockPush).toHaveBeenCalledWith('/login')
     })
 
-    expect(wrapper.find('.header-title').text()).toBe('Seguridad de Cuenta')
-  })
+    it('shows route title for Dashboard', () => {
+        mockRoute.name = 'Dashboard'
+        mockRoute.path = '/dashboard'
 
-  it('renders auth layout for NotFound route', () => {
-    mockRoute.name = 'NotFound'
-    mockRoute.path = '/404'
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
+          }
+        })
 
-    const wrapper = mount(App, {
-      global: {
-        stubs: ['router-view', 'router-link']
-      }
+        expect(wrapper.find('.header-title').text()).toBe('Vulnerabilidades Wazuh')
     })
 
-    expect(wrapper.find('.auth-layout').exists()).toBe(true)
-    expect(wrapper.find('.app-layout').exists()).toBe(false)
-  })
+    it('shows route title for ConfigWazuh', () => {
+        mockRoute.name = 'ConfigWazuh'
+        mockRoute.path = '/config-wazuh'
 
-  it('returns empty title for unknown route', () => {
-    mockRoute.name = 'AlgoRaro'
-    mockRoute.path = '/algo-raro'
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
+          }
+        })
 
-    const wrapper = mount(App, {
-      global: {
-        stubs: ['router-view', 'router-link']
-      }
+        expect(wrapper.find('.header-title').text()).toBe('Configuración de Wazuh')
     })
 
-    expect(wrapper.find('.header-title').text()).toBe('')
-  })
+    it('shows route title for ChangePassword', () => {
+        mockRoute.name = 'ChangePassword'
+        mockRoute.path = '/change-password'
 
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
+          }
+        })
+
+        expect(wrapper.find('.header-title').text()).toBe('Seguridad de Cuenta')
+    })
+
+    it('computes route title for NotFound', () => {
+        mockRoute.name = 'NotFound'
+        mockRoute.path = '/404'
+
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
+          }
+        })
+
+        expect(wrapper.vm.currentRouteName).toBe('Página no encontrada')
+    })
+
+    it('returns empty title for unknown route', () => {
+        mockRoute.name = 'AlgoRaro'
+        mockRoute.path = '/algo-raro'
+
+        const wrapper = mount(App, {
+          global: {
+            stubs: ['router-view', 'router-link']
+          }
+        })
+
+        expect(wrapper.find('.header-title').text()).toBe('')
+    })
 })

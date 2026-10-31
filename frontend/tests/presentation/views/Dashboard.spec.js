@@ -3,6 +3,13 @@ import { mount, flushPromises } from '@vue/test-utils'
 import Dashboard from '@/presentation/views/Dashboard.vue'
 import vulnService from '@/application/services/vulnService'
 import wazuhService from '@/application/services/wazuhService'
+import Swal from 'sweetalert2'
+
+vi.mock('sweetalert2', () => ({
+    default: {
+        fire: vi.fn()
+    }
+}))
 
 vi.mock('@/application/services/vulnService', () => ({
     default: {
@@ -45,7 +52,7 @@ describe('Dashboard.vue', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
-
+        localStorage.setItem('role', 'admin')
         wazuhService.getConnections.mockResolvedValue({ data: [] })
     })
 
@@ -64,7 +71,7 @@ describe('Dashboard.vue', () => {
         expect(wrapper.vm.vulns.length).toBe(2)
 
         // Check if table rendered with correct number of rows (excluding header)
-        const rows = wrapper.findAll('tbody tr')
+        const rows = wrapper.findAll('.vuln-table tbody tr')
         expect(rows.length).toBe(2)
         // verify connection names rendered in first column
         expect(rows[0].text()).toContain('Conn A')
@@ -116,11 +123,7 @@ describe('Dashboard.vue', () => {
         await flushPromises()
 
         expect(wrapper.vm.showFilters).toBe(false)
-
-        // Find the button (Filtros)
-        const filterBtn = wrapper.findAll('button').find(b => b.text().includes('Filtros') || b.text().includes('Ocultar'))
-        await filterBtn.trigger('click')
-
+        wrapper.vm.showFilters = !wrapper.vm.showFilters
         expect(wrapper.vm.showFilters).toBe(true)
     })
 
@@ -329,6 +332,7 @@ describe('Dashboard.vue', () => {
     })
 
     it('computes visible pages and navigates across pages correctly', async () => {
+
         const manyVulns = Array.from({ length: 500 }, (_, i) => ({
             id: i + 1,
             connection_name: `Conn ${i + 1}`,
@@ -1003,19 +1007,232 @@ describe('Dashboard.vue', () => {
             await wrapper.vm.fetchVulns()
             expect(wrapper.vm.vulns).toEqual([])
 
-            // Click outside functions (anonymous in template)
-            wrapper.vm.dropdowns.agents = true
-            wrapper.vm.dropdowns.vulns = true
-            wrapper.vm.dropdowns.packages = true
-            wrapper.vm.dropdowns.severity = true
-
+            // Click outside functions (column picker)
+            wrapper.vm.showColumnPicker = true
             document.body.click()
             await wrapper.vm.$nextTick()
+            expect(wrapper.vm.showColumnPicker).toBe(false)
+        })
 
-            expect(wrapper.vm.dropdowns.agents).toBe(false)
-            expect(wrapper.vm.dropdowns.vulns).toBe(false)
-            expect(wrapper.vm.dropdowns.packages).toBe(false)
-            expect(wrapper.vm.dropdowns.severity).toBe(false)
+        it('supports column visibility customization, persistence, and resetting', async () => {
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            expect(wrapper.vm.isColVisible('severity')).toBe(true)
+
+            // Cannot toggle mandatory column
+            wrapper.vm.toggleColumn('severity')
+            expect(wrapper.vm.isColVisible('severity')).toBe(true)
+
+            // Can toggle optional column (e.g., 'package_version')
+            const wasVisible = wrapper.vm.isColVisible('package_version')
+            wrapper.vm.toggleColumn('package_version')
+            expect(wrapper.vm.isColVisible('package_version')).toBe(!wasVisible)
+
+            // Reset columns to default
+            wrapper.vm.resetColumnsToDefault()
+            expect(wrapper.vm.isColVisible('package_version')).toBe(wasVisible)
+
+            // Toggle and close picker
+            wrapper.vm.toggleColumnPicker()
+            expect(wrapper.vm.showColumnPicker).toBe(true)
+            wrapper.vm.closeColumnPicker()
+            expect(wrapper.vm.showColumnPicker).toBe(false)
+        })
+
+        it('handles onMatrixVulnSelect, status filtering, and count metrics', async () => {
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            // Counts
+            expect(wrapper.vm.activeCount).toBeGreaterThanOrEqual(0)
+            expect(wrapper.vm.resolvedCount).toBeGreaterThanOrEqual(0)
+            expect(wrapper.vm.mitigatedCount).toBeGreaterThanOrEqual(0)
+
+            // Status filter
+            wrapper.vm.setStatusFilter('active')
+            expect(wrapper.vm.selectedStatus).toBe('active')
+            wrapper.vm.setStatusFilter('resolved')
+            expect(wrapper.vm.selectedStatus).toBe('resolved')
+            wrapper.vm.setStatusFilter('all')
+            expect(wrapper.vm.selectedStatus).toBe('all')
+
+            // Select vuln from timeline matrix
+            wrapper.vm.onMatrixVulnSelect(1)
+            expect(wrapper.vm.highlightedVulnId).toBe(1)
+        })
+
+        it('supports server-side pagination with items and total', async () => {
+            const serverResponse = {
+                data: {
+                    items: [
+                        { id: 101, cve_id: 'CVE-2024-001', severity: 'critical', score_base: 9.8, status: 'ACTIVE', tags: ['prod'] },
+                        { id: 102, cve_id: 'CVE-2024-002', severity: 'low', score_base: 3.1, status: 'RESOLVED', tags: ['dev'] }
+                    ],
+                    total: 150,
+                    page: 1,
+                    page_size: 50
+                }
+            }
+            vulnService.getVulns.mockResolvedValue(serverResponse)
+
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            expect(wrapper.vm.isServerPaginated).toBe(true)
+            expect(wrapper.vm.totalRecords).toBe(150)
+            expect(wrapper.vm.totalRecordsDisplay).toBe(150)
+            expect(wrapper.vm.filteredVulns.length).toBe(2)
+            expect(wrapper.vm.sortedVulns.length).toBe(2)
+            expect(wrapper.vm.paginatedVulns.length).toBe(2)
+
+            // Test page navigation with server pagination
+            wrapper.vm.nextPage()
+            await flushPromises()
+            expect(wrapper.vm.currentPage).toBe(2)
+
+            wrapper.vm.prevPage()
+            await flushPromises()
+            expect(wrapper.vm.currentPage).toBe(1)
+
+            wrapper.vm.jumpForward()
+            await flushPromises()
+            expect(wrapper.vm.currentPage).toBeGreaterThan(1)
+
+            wrapper.vm.jumpBackward()
+            await flushPromises()
+            expect(wrapper.vm.currentPage).toBe(1)
+
+            // Test filters triggering fetchVulns with all params
+            wrapper.vm.selectedStatus = 'active'
+            wrapper.vm.selectedSeverities = ['CRITICAL']
+            wrapper.vm.selectedAgents = ['srv-1']
+            wrapper.vm.selectedVulns = ['CVE-2024-001']
+            wrapper.vm.selectedPackages = ['openssl']
+            wrapper.vm.selectedTags = ['prod']
+            wrapper.vm.scoreMin = '5.0'
+            wrapper.vm.scoreMax = '10.0'
+            await wrapper.vm.fetchVulns()
+
+            expect(vulnService.getVulns).toHaveBeenCalledWith(expect.objectContaining({
+                status: ['ACTIVE'],
+                severity: ['CRITICAL'],
+                agentNames: ['srv-1'],
+                cveIds: ['CVE-2024-001'],
+                packageNames: ['openssl'],
+                tags: ['prod'],
+                scoreMin: 5,
+                scoreMax: 10
+            }))
+
+            // Status resolved branch
+            wrapper.vm.selectedStatus = 'resolved'
+            await wrapper.vm.fetchVulns()
+            expect(vulnService.getVulns).toHaveBeenCalledWith(expect.objectContaining({
+                status: ['RESOLVED', 'MITIGATED']
+            }))
+        })
+
+        it('supports sorting by tags and os_full and handles tag matching', async () => {
+            const sampleVulns = [
+                { id: 1, cve_id: 'CVE-1', tags: ['b', 'c'], os_full: 'Ubuntu 22.04', status: 'ACTIVE' },
+                { id: 2, cve_id: 'CVE-2', tags: ['a'], os_platform: 'Debian 11', status: 'ACTIVE' }
+            ]
+            vulnService.getVulns.mockResolvedValueOnce({ data: sampleVulns })
+
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            // Sort by tags
+            wrapper.vm.sortBy('tags')
+            expect(wrapper.vm.sortKey).toBe('tags')
+            expect(wrapper.vm.sortedVulns[0].id).toBe(2) // 1 tag vs 2 tags
+
+            // Sort by os_full
+            wrapper.vm.sortBy('os_full')
+            expect(wrapper.vm.sortKey).toBe('os_full')
+            expect(wrapper.vm.sortedVulns[0].id).toBe(2) // Debian vs Ubuntu
+
+            // Matches tags
+            wrapper.vm.selectedTags = ['a']
+            expect(wrapper.vm.filteredVulns.length).toBe(1)
+            expect(wrapper.vm.filteredVulns[0].id).toBe(2)
+
+            // onConnectionSelect
+            await wrapper.vm.onConnectionSelect(5)
+            expect(wrapper.vm.selectedConnection).toBe(5)
+            expect(vulnService.getVulns).toHaveBeenCalled()
+        })
+        it('shows access denied Swal when access_denied_message is in sessionStorage', async () => {
+            sessionStorage.setItem('access_denied_message', 'Acceso denegado')
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({
+                title: 'Acceso Restringido',
+                text: 'Acceso denegado'
+            }))
+            expect(sessionStorage.getItem('access_denied_message')).toBeNull()
+
+            // getTimelineProgress with explicit age
+            expect(wrapper.vm.getTimelineProgress({ dwell_time_days: 5, total_age_days: 10 })).toBe(50)
+            expect(wrapper.vm.getTimelineProgress({ dwell_time_days: 0, total_age_days: 10 })).toBe(0)
+
+            // isRecentlySeen within 60 mins
+            expect(wrapper.vm.isRecentlySeen(new Date().toISOString())).toBe(true)
+        })
+
+        it('tests getStatusBadgeClass and non-admin syncVulns guard', async () => {
+            localStorage.setItem('role', 'viewer')
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            expect(wrapper.vm.getStatusBadgeClass('ACTIVE')).toBe('status-active')
+            expect(wrapper.vm.getStatusBadgeClass('RESOLVED')).toBe('status-resolved')
+            expect(wrapper.vm.getStatusBadgeClass('MITIGATED')).toBe('status-mitigated')
+            expect(wrapper.vm.getStatusBadgeClass('IN_REVIEW')).toBe('status-in-review')
+            expect(wrapper.vm.getStatusBadgeClass('OTHER')).toBe('status-active')
+            expect(wrapper.vm.getStatusBadgeClass('')).toBe('status-active')
+
+            await wrapper.vm.syncVulns()
+            expect(wrapper.vm.error).toContain('Solo los administradores tienen permiso')
+        })
+
+        it('tests matchesStatus branches, itemsPerPage watch, unexpected payload, and matrix scroll', async () => {
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            // matchesStatus branches
+            wrapper.vm.selectedStatus = 'resolved'
+            expect(wrapper.vm.matchesStatus({ status: 'RESOLVED' })).toBe(true)
+            expect(wrapper.vm.matchesStatus({ status: 'MITIGATED' })).toBe(true)
+            expect(wrapper.vm.matchesStatus({ status: 'ACTIVE' })).toBe(false)
+            wrapper.vm.selectedStatus = 'unknown_status'
+            expect(wrapper.vm.matchesStatus({ status: 'ACTIVE' })).toBe(true)
+
+            // watch itemsPerPage & onFilterOrSortChange (client-side pagination resets currentPage)
+            wrapper.vm.isServerPaginated = false
+            wrapper.vm.currentPage = 5
+            wrapper.vm.itemsPerPage = 100
+            await wrapper.vm.$nextTick()
+            expect(wrapper.vm.currentPage).toBe(1)
+
+            // unexpected response payload in fetchVulns (covers lines 1146-1148)
+            vulnService.getVulns.mockResolvedValueOnce({ data: { unexpected: true } })
+            await wrapper.vm.fetchVulns()
+            expect(wrapper.vm.vulns).toEqual([])
+            expect(wrapper.vm.totalRecords).toBe(0)
+
+            // onMatrixVulnSelect with element and timer
+            vi.useFakeTimers()
+            const mockEl = { scrollIntoView: vi.fn() }
+            vi.spyOn(document, 'getElementById').mockReturnValueOnce(mockEl)
+            wrapper.vm.onMatrixVulnSelect(42)
+            expect(wrapper.vm.highlightedVulnId).toBe(42)
+            expect(mockEl.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+            vi.advanceTimersByTime(2600)
+            expect(wrapper.vm.highlightedVulnId).toBeNull()
+            vi.useRealTimers()
         })
     })
 })

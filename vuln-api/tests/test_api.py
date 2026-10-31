@@ -1,8 +1,15 @@
 import pytest
 import os
+from datetime import datetime, timedelta, timezone
 os.environ["ENCRYPTION_KEY"] = "V3pXU0Y1ZzV3S09SclpIbmVyeXpZREp3Y0p6S2pYUTQ="
 from unittest.mock import patch
-from app.models import User, WazuhConnection, WazuhVulnerability, VulnerabilityHistory
+from app.models import (
+    User,
+    VulnerabilityEvent,
+    VulnerabilityHistory,
+    WazuhConnection,
+    WazuhVulnerability,
+)
 from app.auth import hash_password
 from app.crypto import encrypt
 
@@ -36,11 +43,47 @@ def _create_connection(db, name="test-conn", is_active=True):
     return conn
 
 
+def _create_vuln(
+    db,
+    conn,
+    cve,
+    severity="High",
+    status="ACTIVE",
+    agent_id="001",
+    agent_name="host-1",
+    package_name="pkg",
+    detected_at=None,
+    score_base=None,
+    tags=None,
+):
+    detected_at = detected_at or datetime.now(timezone.utc)
+    vuln = WazuhVulnerability(
+        connection_id=conn.id,
+        status=status,
+        agent_id=agent_id,
+        agent_name=agent_name,
+        package_name=package_name,
+        package_version="1.0",
+        cve_id=cve,
+        severity=severity,
+        score_base=score_base,
+        tags=tags or [],
+        detected_at=detected_at,
+        first_seen=detected_at,
+        last_seen=detected_at,
+    )
+    db.add(vuln)
+    db.commit()
+    db.refresh(vuln)
+    return vuln
+
+
 def _raw_vuln(cve="CVE-2023-9999", severity="High"):
     return [{
-        "agent": {"id": "001", "name": "host-1"},
+        "agent": {"id": "001", "name": "host-1", "groups": ["linux"]},
         "host": {"os": {"full": "Ubuntu 22.04", "platform": "ubuntu", "version": "22.04"}},
         "package": {"name": "curl", "version": "7.81", "type": "deb", "architecture": "amd64"},
+        "tags": ["prod"],
         "vulnerability": {
             "id": cve, "severity": severity,
             "score": {"base": 6.0, "version": "3.1"},
@@ -139,15 +182,64 @@ def test_sync_vulnerabilities_success(mock_fetch, client, db_session):
     assert sync_res.json()["synced"] == 1
 
     get_res = client.get("/vulns", headers=headers)
-    assert len(get_res.json()) == 1
-    vuln_item = get_res.json()[0]
+    payload = get_res.json()
+    assert payload["total"] == 1
+    assert payload["page"] == 1
+    assert payload["page_size"] == 50
+    assert len(payload["items"]) == 1
+    vuln_item = payload["items"][0]
     assert vuln_item["cve_id"] == "CVE-2023-1234"
     # new requirement: response should include origin connection name
     assert vuln_item.get("connection_name") == "test"
+    assert [h["action"] for h in vuln_item["history"]] == ["DETECTED"]
     # Verifica que first_seen y last_seen existen y son iguales al crear
     assert vuln_item["first_seen"] is not None
     assert vuln_item["last_seen"] is not None
     assert vuln_item["first_seen"] == vuln_item["last_seen"]
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_sync_persists_vulnerability_metadata(mock_fetch, client, db_session):
+    mock_fetch.return_value = _raw_vuln()
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=_get_headers(client))
+
+    db_session.expire_all()
+    vuln = db_session.query(WazuhVulnerability).one()
+    assert vuln.agent_name == "host-1"
+    assert vuln.package_name == "curl"
+    assert vuln.package_version == "7.81"
+    assert vuln.severity == "High"
+    assert float(vuln.score_base) == 6.0
+    assert vuln.tags == ["prod", "linux"]
+    assert vuln.last_seen is not None
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_sync_updates_existing_metadata(mock_fetch, client, db_session):
+    first = _raw_vuln(severity="Low")
+    first[0]["agent"]["name"] = "host-before"
+    first[0]["tags"] = ["old"]
+    mock_fetch.return_value = first
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    headers = _get_headers(client)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+
+    second = _raw_vuln(severity="Critical")
+    second[0]["agent"]["name"] = "host-after"
+    second[0]["tags"] = ["new"]
+    mock_fetch.return_value = second
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+
+    db_session.expire_all()
+    vuln = db_session.query(WazuhVulnerability).one()
+    assert vuln.agent_name == "host-after"
+    assert vuln.severity == "Critical"
+    assert float(vuln.score_base) == 6.0
+    assert vuln.tags == ["new", "linux"]
+    assert db_session.query(WazuhVulnerability).count() == 1
 
 
 def test_change_password_success(client, db_session):
@@ -307,6 +399,29 @@ def test_delete_nonexistent_user(client, db_session):
     assert client.delete("/users/9999", headers=_get_headers(client)).status_code == 404
 
 
+def test_update_user(client, db_session):
+    _create_user(db_session)
+    headers = _get_headers(client)
+    client.post("/users", json={"username": "toupdate", "password": "x"}, headers=headers)
+    users = client.get("/users", headers=headers).json()
+    target_id = next(u["id"] for u in users if u["username"] == "toupdate")
+
+    # Update role, tags, is_active
+    res = client.put(f"/users/{target_id}", json={"role": "viewer", "tags": ["prod"], "is_active": True}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["message"] == "Usuario actualizado exitosamente"
+
+    # Verify updated values
+    updated_users = client.get("/users", headers=headers).json()
+    updated = next(u for u in updated_users if u["id"] == target_id)
+    assert updated["role"] == "viewer"
+    assert updated["tags"] == ["prod"]
+
+    # 404 for non-existent user
+    assert client.put("/users/9999", json={"role": "viewer"}, headers=headers).status_code == 404
+
+
+
 # wazuh connections
 
 def test_list_connections_empty(client, db_session):
@@ -457,7 +572,12 @@ def test_sync_all_unauthenticated(client):
 
 def test_list_vulns_empty(client, db_session):
     _create_user(db_session)
-    assert client.get("/vulns", headers=_get_headers(client)).json() == []
+    assert client.get("/vulns", headers=_get_headers(client)).json() == {
+        "total": 0,
+        "page": 1,
+        "page_size": 50,
+        "items": [],
+    }
 
 
 def test_list_vulns_unauthenticated(client):
@@ -465,11 +585,184 @@ def test_list_vulns_unauthenticated(client):
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns", return_value=MOCK_VULN)
-def test_list_vulns_limit_zero(mock_fetch, client, db_session):
+def test_list_vulns_paginates(mock_fetch, client, db_session):
     _create_user(db_session)
     conn = _create_connection(db_session)
     client.post(f"/wazuh-connections/{conn.id}/sync", headers=_get_headers(client))
-    assert client.get("/vulns?limit=0", headers=_get_headers(client)).json() == []
+    headers = _get_headers(client)
+
+    first = client.get("/vulns?page=1&page_size=1", headers=headers).json()
+    second = client.get("/vulns?page=2&page_size=1", headers=headers).json()
+    assert first["total"] == 1
+    assert len(first["items"]) == 1
+    assert len(second["items"]) == 0
+    assert client.get("/vulns?page=0", headers=headers).status_code == 422
+    assert client.get("/vulns?page_size=501", headers=headers).status_code == 422
+
+
+def test_list_vulns_filters(client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    other = _create_connection(db_session, name="other")
+    now = datetime.now(timezone.utc)
+    _create_vuln(
+        db_session,
+        conn,
+        "CVE-2026-0001",
+        agent_name="host-one",
+        package_name="openssl",
+        detected_at=now - timedelta(days=2),
+    )
+    _create_vuln(
+        db_session,
+        conn,
+        "CVE-2026-0002",
+        severity="Low",
+        agent_name="host-two",
+        package_name="curl",
+        detected_at=now - timedelta(days=1),
+    )
+    _create_vuln(
+        db_session,
+        conn,
+        "CVE-2026-0003",
+        status="RESOLVED",
+        agent_name="host-three",
+        package_name="openssl",
+        detected_at=now,
+    )
+    _create_vuln(db_session, other, "CVE-2026-0004", agent_name="host-one")
+    headers = _get_headers(client)
+
+    assert client.get("/vulns", headers=headers).json()["total"] == 4
+    assert client.get(
+        f"/vulns?connection_id={conn.id}", headers=headers
+    ).json()["total"] == 3
+    assert client.get("/vulns?severity=High", headers=headers).json()["total"] == 3
+    assert client.get("/vulns?status=RESOLVED", headers=headers).json()["total"] == 1
+    assert client.get("/vulns?search=openssl", headers=headers).json()["total"] == 2
+    assert client.get("/vulns?search=host-two", headers=headers).json()["total"] == 1
+    cutoff = (now - timedelta(hours=12)).isoformat()
+    assert client.get("/vulns", params={"date_from": cutoff}, headers=headers).json()["total"] == 2
+    assert client.get("/vulns", params={"date_to": cutoff}, headers=headers).json()["total"] == 2
+
+
+def test_list_vulns_advanced_filters(client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    _create_vuln(
+        db_session,
+        conn,
+        "CVE-2026-1001",
+        severity="High",
+        agent_name="agent-a",
+        package_name="openssl",
+        score_base=9.8,
+        tags=["prod"],
+    )
+    _create_vuln(
+        db_session,
+        conn,
+        "CVE-2026-1002",
+        severity="Low",
+        status="RESOLVED",
+        agent_name="agent-b",
+        package_name="curl",
+        score_base=3.1,
+        tags=["dev"],
+    )
+    _create_vuln(
+        db_session,
+        conn,
+        "CVE-2026-1003",
+        severity="Medium",
+        agent_name="agent-a",
+        package_name="curl",
+        tags=["prod", "dev"],
+    )
+    headers = _get_headers(client)
+
+    def total(query):
+        return client.get(f"/vulns?{query}", headers=headers).json()["total"]
+
+    assert total("agent_name=agent-a") == 2
+    assert total("package_name=curl") == 2
+    assert total("cve_id=CVE-2026-1002") == 1
+    assert total("tags=prod") == 2
+    assert total("tags=prod&tags=dev") == 3
+    assert total("severity=HIGH") == 1
+    assert total("status=resolved") == 1
+    assert total("score_min=8") == 1
+    assert total("score_max=5") == 1
+    assert total("agent_name=agent-a&package_name=curl") == 1
+
+
+def test_list_vulns_search_escapes_wildcards(client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    _create_vuln(db_session, conn, "CVE-2026-2001", agent_name="host-one")
+    _create_vuln(db_session, conn, "CVE-2026-2002", agent_name="host%one")
+    _create_vuln(db_session, conn, "CVE-2026-2003", agent_name="host_one")
+    headers = _get_headers(client)
+
+    percent = client.get(
+        "/vulns", params={"search": "host%one"}, headers=headers
+    ).json()
+    underscore = client.get(
+        "/vulns", params={"search": "host_one"}, headers=headers
+    ).json()
+    assert percent["total"] == 1
+    assert underscore["total"] == 1
+
+
+def test_list_vulns_sorting(client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    other = _create_connection(db_session, name="zzz")
+    _create_vuln(
+        db_session,
+        conn,
+        "CVE-2026-3001",
+        severity="Low",
+        score_base=3.0,
+    )
+    _create_vuln(
+        db_session,
+        other,
+        "CVE-2026-3002",
+        severity="Critical",
+        score_base=9.0,
+    )
+    headers = _get_headers(client)
+
+    by_score = client.get(
+        "/vulns?sort_by=score_base&sort_dir=desc", headers=headers
+    ).json()["items"]
+    by_cve = client.get(
+        "/vulns?sort_by=cve_id&sort_dir=asc", headers=headers
+    ).json()["items"]
+    by_severity = client.get(
+        "/vulns?sort_by=severity&sort_dir=desc", headers=headers
+    ).json()["items"]
+    by_connection = client.get(
+        "/vulns?sort_by=connection_name&sort_dir=asc", headers=headers
+    ).json()["items"]
+
+    assert [item["cve_id"] for item in by_score] == [
+        "CVE-2026-3002",
+        "CVE-2026-3001",
+    ]
+    assert [item["cve_id"] for item in by_cve] == [
+        "CVE-2026-3001",
+        "CVE-2026-3002",
+    ]
+    assert [item["cve_id"] for item in by_severity] == [
+        "CVE-2026-3002",
+        "CVE-2026-3001",
+    ]
+    assert by_connection[0]["connection_name"] == "test-conn"
+    assert client.get("/vulns?sort_by=bogus", headers=headers).status_code == 422
+    assert client.get("/vulns?sort_dir=sideways", headers=headers).status_code == 422
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns", return_value=MOCK_VULN)
@@ -479,8 +772,8 @@ def test_list_vulns_shows_connection_name(mock_fetch, client, db_session):
     conn = _create_connection(db_session, name="myconn")
     client.post(f"/wazuh-connections/{conn.id}/sync", headers=_get_headers(client))
     res_list = client.get("/vulns", headers=_get_headers(client)).json()
-    assert len(res_list) == 1
-    assert res_list[0].get("connection_name") == "myconn"
+    assert len(res_list["items"]) == 1
+    assert res_list["items"][0].get("connection_name") == "myconn"
 
 
 # fetch vulns
@@ -493,6 +786,10 @@ def test_new_vuln_creates_detected_history(mock_fetch, client, db_session):
     client.post(f"/wazuh-connections/{conn.id}/sync", headers=_get_headers(client))
     actions = [h.action for h in db_session.query(VulnerabilityHistory).all()]
     assert "DETECTED" in actions
+    event_types = [
+        e.event_type for e in db_session.query(VulnerabilityEvent).all()
+    ]
+    assert event_types == ["DETECTED"]
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")
@@ -510,6 +807,10 @@ def test_resolved_vuln_gets_reopened(mock_fetch, client, db_session):
     assert vuln.status == "ACTIVE"
     actions = [h.action for h in db_session.query(VulnerabilityHistory).all()]
     assert "REOPENED" in actions
+    event_types = [
+        e.event_type for e in db_session.query(VulnerabilityEvent).all()
+    ]
+    assert event_types.count("REOPENED") == 1
     # Verifica que last_seen se actualiza pero first_seen no cambia
     assert vuln.first_seen is not None
     assert vuln.last_seen is not None
@@ -527,6 +828,10 @@ def test_vuln_resolved_when_absent_from_payload(mock_fetch, client, db_session):
     client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
     vuln = db_session.query(WazuhVulnerability).first()
     assert vuln.status == "RESOLVED"
+    event_types = [
+        e.event_type for e in db_session.query(VulnerabilityEvent).all()
+    ]
+    assert event_types.count("RESOLVED") == 1
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")
@@ -540,6 +845,44 @@ def test_severity_change_logged_in_history(mock_fetch, client, db_session):
     client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
     actions = [h.action for h in db_session.query(VulnerabilityHistory).all()]
     assert "SEVERITY_CHANGED" in actions
+    event_types = [
+        e.event_type for e in db_session.query(VulnerabilityEvent).all()
+    ]
+    assert event_types.count("SEVERITY_CHANGED") == 1
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_repeated_sync_does_not_duplicate_events(mock_fetch, client, db_session):
+    mock_fetch.return_value = _raw_vuln()
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    headers = _get_headers(client)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+    events = db_session.query(VulnerabilityEvent).all()
+    assert len(events) == 1
+    assert events[0].event_type == "DETECTED"
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_vuln_events_and_history_endpoints(mock_fetch, client, db_session):
+    mock_fetch.return_value = _raw_vuln()
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    headers = _get_headers(client)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+    vuln = db_session.query(WazuhVulnerability).first()
+
+    events_res = client.get("/vulns/events", headers=headers)
+    assert events_res.status_code == 200
+    assert events_res.json()[0]["event_type"] == "DETECTED"
+
+    history_res = client.get(f"/vulns/{vuln.id}/history", headers=headers)
+    assert history_res.status_code == 200
+    assert history_res.json()[0]["action"] == "DETECTED"
+
+    missing_res = client.get("/vulns/9999/history", headers=headers)
+    assert missing_res.status_code == 404
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")
@@ -567,3 +910,49 @@ def test_viewer_role_forbidden_actions(client, db_session):
 
     res2 = client.post("/users", json={"username": "new", "password": "123"}, headers=headers)
     assert res2.status_code == 403
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_user_tag_filtering(mock_fetch, client, db_session):
+    mock_fetch.return_value = [
+        {
+            "agent": {"id": "001", "name": "host-dev"},
+            "host": {"os": {}},
+            "package": {"name": "lib1", "version": "1.0", "type": "deb", "architecture": "amd64"},
+            "vulnerability": {"id": "CVE-2023-0001", "severity": "High", "score": {}},
+        },
+        {
+            "agent": {"id": "002", "name": "host-prod"},
+            "host": {"os": {}},
+            "package": {"name": "lib2", "version": "2.0", "type": "deb", "architecture": "amd64"},
+            "vulnerability": {"id": "CVE-2023-0002", "severity": "Medium", "score": {}},
+        }
+    ]
+    _create_user(db_session, username="admin_user", role="admin")
+    conn = _create_connection(db_session)
+    client.post(f"/wazuh-connections/{conn.id}/sync", headers=_get_headers(client, username="admin_user", password="admin"))
+
+    vulns = db_session.query(WazuhVulnerability).all()
+    if len(vulns) >= 2:
+        vulns[0].tags = ["dev"]
+        vulns[1].tags = ["prod"]
+        db_session.commit()
+
+    viewer = _create_user(db_session, username="dev_viewer", role="viewer")
+    viewer.tags = ["dev"]
+    db_session.commit()
+
+    headers_viewer = _get_headers(client, username="dev_viewer", password="admin")
+    res = client.get("/vulns", headers=headers_viewer).json()
+    assert res["total"] == 1
+    assert res["items"][0]["cve_id"] == "CVE-2023-0001"
+
+
+def test_vulns_query_filters(client, db_session):
+    _create_user(db_session)
+    headers = _get_headers(client)
+    res = client.get(
+        "/vulns?score_min=4.0&score_max=9.5&search=bash&date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z",
+        headers=headers
+    )
+    assert res.status_code == 200

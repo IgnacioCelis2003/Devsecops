@@ -1,12 +1,13 @@
 services:
   db-api:
-    image: postgres:15
+    image: timescale/timescaledb:2.28.3-pg15
     container_name: db-api
     restart: unless-stopped
     env_file:
       - .env
     volumes:
       - postgres_api_data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
     networks:
       - app-network
     healthcheck:
@@ -44,8 +45,8 @@ services:
     env_file:
       - .env
     ports:
-      - "80:80"
-      - "443:443"
+      - "8113:80"
+      - "8103:443"
     volumes:
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./certbot/conf:/etc/letsencrypt # <-- Certificados finales

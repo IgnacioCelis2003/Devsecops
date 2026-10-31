@@ -8,6 +8,7 @@ vi.mock('@/infrastructure/http/apiClient', () => {
         default: {
             get: vi.fn(),
             post: vi.fn(),
+            put: vi.fn(),
             delete: vi.fn(),
         }
     }
@@ -34,6 +35,18 @@ describe('userService.js', () => {
         const result = await userService.createUser(newUser)
 
         expect(apiClient.post).toHaveBeenCalledWith('/users', newUser)
+        expect(result).toEqual(mockResponse)
+    })
+
+    it('updateUser calls apiClient.put on /users/:id with data', async () => {
+        const updateData = { role: 'viewer', tags: ['linux'] }
+        const mockResponse = { data: { id: 3, ...updateData } }
+
+        apiClient.put.mockResolvedValueOnce(mockResponse)
+
+        const result = await userService.updateUser(3, updateData)
+
+        expect(apiClient.put).toHaveBeenCalledWith('/users/3', updateData)
         expect(result).toEqual(mockResponse)
     })
 

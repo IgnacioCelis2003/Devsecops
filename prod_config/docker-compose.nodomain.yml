@@ -1,6 +1,6 @@
 services:
   db-api:
-    image: postgres:15
+    image: timescale/timescaledb:2.28.3-pg15
     container_name: db-api
     restart: unless-stopped
     env_file:

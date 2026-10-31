@@ -9,6 +9,10 @@ const userService = {
     return apiClient.post('/users', userData)
   },
 
+  updateUser: async (userId, userData) => {
+    return apiClient.put(`/users/${userId}`, userData)
+  },
+
   deleteUser: async (userId) => {
     return apiClient.delete(`/users/${userId}`)
   },

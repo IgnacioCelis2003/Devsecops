@@ -3,19 +3,17 @@ import Login from '../views/Login.vue'
 import Dashboard from '../views/Dashboard.vue'
 import ConfigUser from '../views/ConfigUser.vue'
 import ConfigWazuh from '../views/ConfigWazuh.vue'
-import Timeline from '../views/Timeline.vue'
 import ChangePassword from '../views/ChangePassword.vue'
 import NotFound from '../views/NotFound.vue'
 import userService from '../../application/services/userService'
 
 
 const routes = [
-  { path: '/login', name: 'Login', component: Login },
-  { path: '/', redirect: '/login' },
+  { path: '/', name: 'Login', component: Login },
+  { path: '/login', name: 'LoginRoute', component: Login },
   { path: '/dashboard', name: 'Dashboard', component: Dashboard, meta: { requiresAuth: true } },
-  { path: '/timeline', name: 'Timeline', component: Timeline, meta: { requiresAuth: true } },
-  { path: '/config-user', name: 'ConfigUser', component: ConfigUser, meta: { requiresAuth: true } },
-  { path: '/config-wazuh', name: 'ConfigWazuh', component: ConfigWazuh, meta: { requiresAuth: true } },
+  { path: '/config-user', name: 'ConfigUser', component: ConfigUser, meta: { requiresAuth: true, requiresAdmin: true } },
+  { path: '/config-wazuh', name: 'ConfigWazuh', component: ConfigWazuh, meta: { requiresAuth: true, requiresAdmin: true } },
   { path: '/change-password', name: 'ChangePassword', component: ChangePassword, meta: { requiresAuth: true } },
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFound },
 ]
@@ -47,6 +45,13 @@ router.beforeEach(async (to, from) => {
       const userMeRes = await userService.getUserMe()
       const user = userMeRes.data
 
+      if (user.username) {
+        localStorage.setItem('username', user.username)
+      }
+      if (user.role) {
+        localStorage.setItem('role', user.role)
+      }
+
       // Si sigue con contraseña por defecto, solo puede entrar a change-password
       if (user.is_default_password && to.path !== '/change-password') {
         sessionStorage.setItem(
@@ -54,6 +59,16 @@ router.beforeEach(async (to, from) => {
           'Para continuar, debes cambiar tu contraseña obligatoriamente.'
         )
         return '/change-password'
+      }
+
+      // Proteger rutas exclusivas de administrador
+      const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin)
+      if (requiresAdmin && user.role !== 'admin') {
+        sessionStorage.setItem(
+          'access_denied_message',
+          'No tienes permisos de administrador para acceder a esta sección.'
+        )
+        return '/dashboard'
       }
 
       return true

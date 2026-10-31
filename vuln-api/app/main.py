@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from .db import Base, engine, ensure_schema_compatibility, SessionLocal
+from .db import Base, engine, SessionLocal
 from .models import User, WazuhVulnerability, WazuhConnection, VulnerabilityHistory
 from .auth import hash_password
 from .wazuh_client import fetch_all_vulns, test_connection
@@ -25,8 +25,8 @@ from .schemas import (
     NewUserRequest,
 )
 
-Base.metadata.create_all(bind=engine)
-ensure_schema_compatibility()
+if engine.dialect.name == "sqlite":
+    Base.metadata.create_all(bind=engine)
 
 CONNECTION_NOT_FOUND = "Conexión no encontrada"
 DOMAINS_ALLOWLIST = [
