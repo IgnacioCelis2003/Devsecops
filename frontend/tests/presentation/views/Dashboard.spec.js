@@ -1054,5 +1054,76 @@ describe('Dashboard.vue', () => {
             wrapper.vm.onMatrixVulnSelect(1)
             expect(wrapper.vm.highlightedVulnId).toBe(1)
         })
+
+        it('supports server-side pagination with items and total', async () => {
+            const serverResponse = {
+                data: {
+                    items: [
+                        { id: 101, cve_id: 'CVE-2024-001', severity: 'critical', score_base: 9.8, status: 'ACTIVE', tags: ['prod'] },
+                        { id: 102, cve_id: 'CVE-2024-002', severity: 'low', score_base: 3.1, status: 'RESOLVED', tags: ['dev'] }
+                    ],
+                    total: 150,
+                    page: 1,
+                    page_size: 50
+                }
+            }
+            vulnService.getVulns.mockResolvedValue(serverResponse)
+
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            expect(wrapper.vm.isServerPaginated).toBe(true)
+            expect(wrapper.vm.totalRecords).toBe(150)
+            expect(wrapper.vm.totalRecordsDisplay).toBe(150)
+            expect(wrapper.vm.filteredVulns.length).toBe(2)
+            expect(wrapper.vm.sortedVulns.length).toBe(2)
+            expect(wrapper.vm.paginatedVulns.length).toBe(2)
+
+            // Test page navigation with server pagination
+            wrapper.vm.nextPage()
+            await flushPromises()
+            expect(wrapper.vm.currentPage).toBe(2)
+
+            wrapper.vm.prevPage()
+            await flushPromises()
+            expect(wrapper.vm.currentPage).toBe(1)
+
+            wrapper.vm.jumpForward()
+            await flushPromises()
+            expect(wrapper.vm.currentPage).toBeGreaterThan(1)
+
+            wrapper.vm.jumpBackward()
+            await flushPromises()
+            expect(wrapper.vm.currentPage).toBe(1)
+
+            // Test filters triggering fetchVulns with all params
+            wrapper.vm.selectedStatus = 'active'
+            wrapper.vm.selectedSeverities = ['CRITICAL']
+            wrapper.vm.selectedAgents = ['srv-1']
+            wrapper.vm.selectedVulns = ['CVE-2024-001']
+            wrapper.vm.selectedPackages = ['openssl']
+            wrapper.vm.selectedTags = ['prod']
+            wrapper.vm.scoreMin = '5.0'
+            wrapper.vm.scoreMax = '10.0'
+            await wrapper.vm.fetchVulns()
+
+            expect(vulnService.getVulns).toHaveBeenCalledWith(expect.objectContaining({
+                status: ['ACTIVE'],
+                severity: ['CRITICAL'],
+                agentNames: ['srv-1'],
+                cveIds: ['CVE-2024-001'],
+                packageNames: ['openssl'],
+                tags: ['prod'],
+                scoreMin: 5,
+                scoreMax: 10
+            }))
+
+            // Status resolved branch
+            wrapper.vm.selectedStatus = 'resolved'
+            await wrapper.vm.fetchVulns()
+            expect(vulnService.getVulns).toHaveBeenCalledWith(expect.objectContaining({
+                status: ['RESOLVED', 'MITIGATED']
+            }))
+        })
     })
 })
