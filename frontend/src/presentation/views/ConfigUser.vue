@@ -106,11 +106,12 @@
         <form @submit.prevent="handleSubmitUser">
           <!-- Nombre de usuario -->
           <div class="form-group">
-            <label class="form-label">Nombre de usuario</label>
+            <label class="form-label" for="user-form-username">Nombre de usuario</label>
             <div class="input-icon">
               <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
               <input 
-                type="text" 
+                id="user-form-username"
+                type="text"
                 v-model="formUser.username" 
                 class="form-input" 
                 :disabled="isEditing" 
@@ -123,11 +124,12 @@
           
           <!-- Contraseña -->
           <div class="form-group">
-            <label class="form-label">{{ isEditing ? 'Nueva contraseña (opcional)' : 'Contraseña inicial' }}</label>
+            <label class="form-label" for="user-form-password">{{ isEditing ? 'Nueva contraseña (opcional)' : 'Contraseña inicial' }}</label>
             <div class="input-icon">
               <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
               <input 
-                type="password" 
+                id="user-form-password"
+                type="password"
                 v-model="formUser.password" 
                 class="form-input" 
                 :required="!isEditing" 
@@ -139,7 +141,7 @@
 
           <!-- Selector de Rol -->
           <div class="form-group">
-            <label class="form-label">Rol y Nivel de Acceso</label>
+            <span class="form-label">Rol y Nivel de Acceso</span>
             <div class="role-grid">
               <label 
                 class="role-card" 
@@ -190,7 +192,9 @@
             <!-- Buscador interno de tags -->
             <div class="tag-search-box">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <label for="tag-search-input" class="sr-only">Buscar etiqueta de Wazuh</label>
               <input 
+                id="tag-search-input"
                 type="text" 
                 v-model="tagFilterQuery" 
                 placeholder="Buscar etiqueta de Wazuh..." 
@@ -346,7 +350,7 @@ const fetchUsers = async () => {
       id: u.id,
       username: u.username,
       role: u.role || (u.username === 'admin' ? 'admin' : 'viewer'),
-      tags: Array.isArray(u.tags) ? u.tags : (u.username === 'admin' ? [] : [])
+      tags: Array.isArray(u.tags) ? u.tags : []
     }))
   } catch (err) {
     usersError.value = 'No se pudieron cargar los usuarios.'

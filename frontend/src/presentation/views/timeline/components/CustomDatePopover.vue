@@ -174,7 +174,7 @@ const weekdays = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 const parseDateParts = (str) => {
   if (!str) return null
   const p = str.split('-').map(Number)
-  if (p.length === 3 && !isNaN(p[0]) && !isNaN(p[1]) && !isNaN(p[2])) {
+  if (p.length === 3 && !Number.isNaN(p[0]) && !Number.isNaN(p[1]) && !Number.isNaN(p[2])) {
     return { year: p[0], month: p[1] - 1, day: p[2] }
   }
   return null

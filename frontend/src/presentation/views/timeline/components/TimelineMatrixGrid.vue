@@ -146,7 +146,7 @@
           <!-- Selector Temporal Anual / Mensual: Año con Stepper, Input Libre (auditorías sin límite) y Selector por Décadas -->
           <template v-if="granularity === 'year' || granularity === 'month'">
             <div class="control-box popover-wrap" v-click-outside="() => (dropdowns.yearPicker = false)">
-              <label class="control-box-label">Año</label>
+              <span class="control-box-label">Año</span>
               <div class="stepper-select-wrap">
                 <button
                   type="button"
@@ -225,7 +225,7 @@
 
             <!-- Mes si la granularidad es mensual -->
             <div v-if="granularity === 'month'" class="control-box">
-              <label class="control-box-label">Mes</label>
+              <span class="control-box-label">Mes</span>
               <select v-model.number="selectedMonth" class="master-select" aria-label="Seleccionar mes">
                 <option v-for="(mName, mIdx) in monthNames" :key="mIdx" :value="mIdx">{{ mName }}</option>
               </select>
@@ -235,7 +235,7 @@
           <!-- Selector de Rango con Mini-Calendarios -->
           <template v-if="granularity === 'range'">
             <div class="control-box">
-              <label class="control-box-label">Desde</label>
+              <span class="control-box-label">Desde</span>
               <CustomDatePopover
                 v-model="rangeStartDate"
                 :min-date="minStartDate"
@@ -246,7 +246,7 @@
               />
             </div>
             <div class="control-box">
-              <label class="control-box-label">Hasta</label>
+              <span class="control-box-label">Hasta</span>
               <CustomDatePopover
                 v-model="rangeEndDate"
                 :min-date="minEndDate"
@@ -276,7 +276,7 @@
 
           <!-- 1. Severidad (Amenaza / Riesgo) -->
           <div class="control-box popover-wrap" v-click-outside="() => (dropdowns.severity = false)">
-            <label class="control-box-label">Severidad</label>
+            <span class="control-box-label">Severidad</span>
             <button class="inline-filter-btn" @click="dropdowns.severity = !dropdowns.severity">
               <span class="inline-filter-text">{{ selectedSeverities.length ? selectedSeverities.length + ' selec.' : 'Todas' }}</span>
               <span class="dropdown-arrow-icon">▼</span>
@@ -301,7 +301,7 @@
 
           <!-- 2. Filtro de Estado Segmentado (Todas / Activas / Resueltas) -->
           <div class="control-box">
-            <label class="control-box-label">Estado</label>
+            <span class="control-box-label">Estado</span>
             <div class="status-segment-group">
               <button
                 type="button"
@@ -335,13 +335,13 @@
 
           <!-- 3. Equipos / Agentes (Infraestructura) -->
           <div class="control-box popover-wrap" v-click-outside="() => (dropdowns.agents = false)">
-            <label class="control-box-label">Equipos</label>
+            <span class="control-box-label">Equipos</span>
             <button class="inline-filter-btn" @click="dropdowns.agents = !dropdowns.agents" :disabled="!agentOptions.length">
               <span class="inline-filter-text">{{ selectedAgents.length ? selectedAgents.length + ' selec.' : 'Todos' }}</span>
               <span class="dropdown-arrow-icon">▼</span>
             </button>
             <div v-if="dropdowns.agents" class="tray-popover shadow-md fade-in">
-              <input type="text" v-model="search.agent" placeholder="Buscar agente..." class="tray-search-input" autofocus>
+              <label for="search-matrix-agent" class="sr-only">Buscar agente</label><input id="search-matrix-agent" type="text" v-model="search.agent" placeholder="Buscar agente..." class="tray-search-input" aria-label="Buscar agente">
               <div class="tray-popover-actions">
                 <button type="button" @click="$emit('update:selected-agents', [...agentOptions])">Todos</button>
                 <button type="button" @click="$emit('update:selected-agents', [])">Limpiar</button>
@@ -362,13 +362,13 @@
 
           <!-- 4. Etiquetas (Tags - Contexto Extra) -->
           <div class="control-box popover-wrap" v-click-outside="() => (dropdowns.tags = false)">
-            <label class="control-box-label">Etiquetas</label>
+            <span class="control-box-label">Etiquetas</span>
             <button class="inline-filter-btn" @click="dropdowns.tags = !dropdowns.tags" :disabled="!tagOptions.length">
               <span class="inline-filter-text">{{ selectedTags.length ? selectedTags.length + ' selec.' : 'Todas' }}</span>
               <span class="dropdown-arrow-icon">▼</span>
             </button>
             <div v-if="dropdowns.tags" class="tray-popover shadow-md fade-in">
-              <input type="text" v-model="search.tag" placeholder="Buscar etiqueta..." class="tray-search-input" autofocus>
+              <label for="search-matrix-tag" class="sr-only">Buscar etiqueta</label><input id="search-matrix-tag" type="text" v-model="search.tag" placeholder="Buscar etiqueta..." class="tray-search-input" aria-label="Buscar etiqueta">
               <div class="tray-popover-actions">
                 <button type="button" @click="$emit('update:selected-tags', [...tagOptions])">Todas</button>
                 <button type="button" @click="$emit('update:selected-tags', [])">Limpiar</button>
@@ -617,8 +617,8 @@ const stepYear = (delta) => {
 }
 
 const applyYearInput = () => {
-  let val = parseInt(yearInputValue.value, 10)
-  if (isNaN(val) || val < 1970 || val > 2099) {
+  let val = Number.parseInt(yearInputValue.value, 10)
+  if (Number.isNaN(val) || val < 1970 || val > 2099) {
     yearInputValue.value = selectedYear.value
     return
   }
@@ -836,7 +836,7 @@ const resolveCell = (vuln, startMs, endMs) => {
   if (!firstSeenStr) return { status: 'NONE', label: '' }
 
   const firstSeenMs = new Date(firstSeenStr).getTime()
-  if (isNaN(firstSeenMs) || firstSeenMs > endMs) {
+  if (Number.isNaN(firstSeenMs) || firstSeenMs > endMs) {
     return { status: 'NONE', label: '' }
   }
 

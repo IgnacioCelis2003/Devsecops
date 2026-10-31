@@ -325,6 +325,7 @@ describe('Dashboard.vue', () => {
     })
 
     it('computes visible pages and navigates across pages correctly', async () => {
+
         const manyVulns = Array.from({ length: 500 }, (_, i) => ({
             id: i + 1,
             connection_name: `Conn ${i + 1}`,
