@@ -1197,5 +1197,42 @@ describe('Dashboard.vue', () => {
             await wrapper.vm.syncVulns()
             expect(wrapper.vm.error).toContain('Solo los administradores tienen permiso')
         })
+
+        it('tests matchesStatus branches, itemsPerPage watch, unexpected payload, and matrix scroll', async () => {
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            // matchesStatus branches
+            wrapper.vm.selectedStatus = 'resolved'
+            expect(wrapper.vm.matchesStatus({ status: 'RESOLVED' })).toBe(true)
+            expect(wrapper.vm.matchesStatus({ status: 'MITIGATED' })).toBe(true)
+            expect(wrapper.vm.matchesStatus({ status: 'ACTIVE' })).toBe(false)
+            wrapper.vm.selectedStatus = 'unknown_status'
+            expect(wrapper.vm.matchesStatus({ status: 'ACTIVE' })).toBe(true)
+
+            // watch itemsPerPage & onFilterOrSortChange (client-side pagination resets currentPage)
+            wrapper.vm.isServerPaginated = false
+            wrapper.vm.currentPage = 5
+            wrapper.vm.itemsPerPage = 100
+            await wrapper.vm.$nextTick()
+            expect(wrapper.vm.currentPage).toBe(1)
+
+            // unexpected response payload in fetchVulns (covers lines 1146-1148)
+            vulnService.getVulns.mockResolvedValueOnce({ data: { unexpected: true } })
+            await wrapper.vm.fetchVulns()
+            expect(wrapper.vm.vulns).toEqual([])
+            expect(wrapper.vm.totalRecords).toBe(0)
+
+            // onMatrixVulnSelect with element and timer
+            vi.useFakeTimers()
+            const mockEl = { scrollIntoView: vi.fn() }
+            vi.spyOn(document, 'getElementById').mockReturnValueOnce(mockEl)
+            wrapper.vm.onMatrixVulnSelect(42)
+            expect(wrapper.vm.highlightedVulnId).toBe(42)
+            expect(mockEl.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+            vi.advanceTimersByTime(2600)
+            expect(wrapper.vm.highlightedVulnId).toBeNull()
+            vi.useRealTimers()
+        })
     })
 })
