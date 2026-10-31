@@ -68,6 +68,82 @@ describe('vulnService.js', () => {
         expect(result).toEqual(mockResponse)
     })
 
+    it('getVulns covers all snake_case and alternative filter parameters', async () => {
+        const mockResponse = { data: [] }
+        apiClient.get.mockResolvedValueOnce(mockResponse)
+
+        const result = await vulnService.getVulns({
+            page_size: 100,
+            offset: 200,
+            connection_id: 5,
+            sort_by: 'date',
+            sort_dir: 'desc',
+            severity: 'CRITICAL',
+            status: 'ACTIVE',
+            tags: ['prod'],
+            agent_name: 'srv-01',
+            cve_id: 'CVE-1',
+            package_name: 'openssl',
+            score_min: 7.0,
+            score_max: 10.0,
+            date_from: '2026-01-01',
+            date_to: '2026-01-31'
+        })
+
+        expect(apiClient.get).toHaveBeenCalledWith('/vulns', {
+            params: {
+                page_size: 100,
+                offset: 200,
+                connection_id: 5,
+                sort_by: 'date',
+                sort_dir: 'desc',
+                severity: 'CRITICAL',
+                status: 'ACTIVE',
+                tags: ['prod'],
+                agent_name: 'srv-01',
+                cve_id: 'CVE-1',
+                package_name: 'openssl',
+                score_min: 7.0,
+                score_max: 10.0,
+                date_from: '2026-01-01',
+                date_to: '2026-01-31'
+            },
+            paramsSerializer: { indexes: null }
+        })
+        expect(result).toEqual(mockResponse)
+    })
+
+    it('getVulns covers camelCase filters, limit clamp and dates', async () => {
+        const mockResponse = { data: [] }
+        apiClient.get.mockResolvedValueOnce(mockResponse)
+
+        const result = await vulnService.getVulns({
+            limit: 1000,
+            agentNames: ['srv-02'],
+            cveIds: ['CVE-2'],
+            packageNames: ['glibc'],
+            scoreMin: 4.5,
+            scoreMax: 8.5,
+            dateFrom: '2026-02-01',
+            dateTo: '2026-02-28'
+        })
+
+        expect(apiClient.get).toHaveBeenCalledWith('/vulns', {
+            params: {
+                page_size: 500,
+                agent_name: ['srv-02'],
+                cve_id: ['CVE-2'],
+                package_name: ['glibc'],
+                score_min: 4.5,
+                score_max: 8.5,
+                date_from: '2026-02-01',
+                date_to: '2026-02-28'
+            },
+            paramsSerializer: { indexes: null }
+        })
+        expect(result).toEqual(mockResponse)
+    })
+
     it('syncVulns calls apiClient.post on /vulns/sync-all', async () => {
         const mockResponse = { data: { synced: 10 } }
 

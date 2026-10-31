@@ -2,13 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ConfigUser from '@/presentation/views/ConfigUser.vue'
 import userService from '@/application/services/userService'
+import vulnService from '@/application/services/vulnService'
 import Swal from 'sweetalert2'
 
 vi.mock('@/application/services/userService', () => ({
     default: {
         getUsers: vi.fn(),
         createUser: vi.fn(),
+        updateUser: vi.fn(),
         deleteUser: vi.fn()
+    }
+}))
+
+vi.mock('@/application/services/vulnService', () => ({
+    default: {
+        getVulns: vi.fn()
     }
 }))
 
@@ -20,13 +28,19 @@ vi.mock('sweetalert2', () => ({
 
 describe('ConfigUser.vue', () => {
     const mockUsers = [
-        { id: 1, username: 'admin' },
-        { id: 2, username: 'analista' }
+        { id: 1, username: 'admin', role: 'admin', tags: [] },
+        { id: 2, username: 'analista', role: 'viewer', tags: ['linux', 'web'] }
     ]
 
     beforeEach(() => {
         vi.clearAllMocks()
         userService.getUsers.mockResolvedValue({ data: mockUsers })
+        vulnService.getVulns.mockResolvedValue({
+            data: [
+                { id: 101, tags: ['linux', 'database'] },
+                { id: 102, tags: ['web', 'production'] }
+            ]
+        })
     })
 
     it('fetches and displays users on mount', async () => {
@@ -77,6 +91,7 @@ describe('ConfigUser.vue', () => {
 
         wrapper.vm.formUser.username = 'new_admin'
         wrapper.vm.formUser.password = 'SuperSecret123'
+        wrapper.vm.formUser.role = 'admin'
 
         userService.createUser.mockResolvedValueOnce({})
 
@@ -86,11 +101,11 @@ describe('ConfigUser.vue', () => {
         expect(userService.createUser).toHaveBeenCalledWith({
             username: 'new_admin',
             password: 'SuperSecret123',
-            role: 'viewer',
+            role: 'admin',
             tags: []
         })
         expect(wrapper.vm.showModal).toBe(false)
-        expect(userService.getUsers).toHaveBeenCalledTimes(2) // 1 initial, 1 after add
+        expect(userService.getUsers).toHaveBeenCalledTimes(2)
     })
 
     it('shows error when creating user without data', async () => {
@@ -122,7 +137,60 @@ describe('ConfigUser.vue', () => {
         await flushPromises()
 
         expect(wrapper.vm.error).toBe('User exists')
-        expect(wrapper.vm.showModal).toBe(true) // Should remain open
+        expect(wrapper.vm.showModal).toBe(true)
+    })
+
+    it('opens edit modal and updates user successfully', async () => {
+        const wrapper = mount(ConfigUser)
+        await flushPromises()
+
+        // Click edit on the second user (analista)
+        const editBtn = wrapper.findAll('tbody tr')[1].findAll('.btn-icon')[0]
+        await editBtn.trigger('click')
+        await flushPromises()
+
+        expect(wrapper.vm.showModal).toBe(true)
+        expect(wrapper.vm.isEditing).toBe(true)
+        expect(wrapper.vm.formUser.username).toBe('analista')
+        expect(wrapper.vm.formUser.role).toBe('viewer')
+
+        // Change tags and password
+        wrapper.vm.formUser.password = 'NewPass123'
+        wrapper.vm.formUser.tags = ['linux', 'production']
+
+        userService.updateUser.mockResolvedValueOnce({})
+
+        await wrapper.find('form').trigger('submit.prevent')
+        await flushPromises()
+
+        expect(userService.updateUser).toHaveBeenCalledWith(2, {
+            role: 'viewer',
+            tags: ['linux', 'production'],
+            password: 'NewPass123'
+        })
+        expect(wrapper.vm.showModal).toBe(false)
+    })
+
+    it('selects and clears all tags in the modal form', async () => {
+        const wrapper = mount(ConfigUser)
+        await flushPromises()
+
+        await wrapper.find('.btn-primary').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.vm.availableTags.length).toBeGreaterThan(0)
+
+        // Select all tags
+        wrapper.vm.selectAllTags()
+        expect(wrapper.vm.formUser.tags.length).toBe(wrapper.vm.availableTags.length)
+
+        // Clear all tags
+        wrapper.vm.clearAllTags()
+        expect(wrapper.vm.formUser.tags.length).toBe(0)
+
+        // Tag filter query
+        wrapper.vm.tagFilterQuery = 'linux'
+        expect(wrapper.vm.filteredAvailableTags).toContain('linux')
     })
 
     it('deletes user successfully after confirmation', async () => {
@@ -139,6 +207,25 @@ describe('ConfigUser.vue', () => {
 
         expect(userService.deleteUser).toHaveBeenCalledWith(1)
         expect(userService.getUsers).toHaveBeenCalledTimes(2)
+    })
+
+    it('handles delete failure gracefully with alert', async () => {
+        const wrapper = mount(ConfigUser)
+        await flushPromises()
+
+        Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+        userService.deleteUser.mockRejectedValueOnce({ response: { data: { detail: 'Cannot delete root admin' } } })
+
+        const deleteBtn = wrapper.findAll('tbody tr')[0].find('.btn-icon-danger')
+        await deleteBtn.trigger('click')
+
+        await flushPromises()
+
+        expect(userService.deleteUser).toHaveBeenCalledWith(1)
+        expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({
+            title: 'Error',
+            text: 'Cannot delete root admin'
+        }))
     })
 
     it('does nothing if delete is cancelled', async () => {

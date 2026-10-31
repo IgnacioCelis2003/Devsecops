@@ -28,6 +28,20 @@ describe('TimelineMatrixGrid.vue', () => {
       history: [
         { action: 'RESOLVED', timestamp: '2026-02-15T12:00:00.000Z' }
       ]
+    },
+    {
+      id: 3,
+      cve_id: 'CVE-2023-9999',
+      severity: 'high',
+      score_base: 7.5,
+      package_name: 'openssl',
+      agent_name: 'srv-db',
+      status: 'MITIGATED',
+      first_seen: '2026-01-05T00:00:00.000Z',
+      last_seen: '2026-01-25T00:00:00.000Z',
+      history: [
+        { action: 'STATUS_CHANGED', details: 'Mitigated rule', timestamp: '2026-01-20T00:00:00.000Z' }
+      ]
     }
   ]
 
@@ -43,9 +57,9 @@ describe('TimelineMatrixGrid.vue', () => {
     tagOptions: ['prod', 'linux'],
     selectedTags: [],
     selectedStatus: 'all',
-    totalRecords: 2,
+    totalRecords: 3,
     activeCount: 1,
-    mitigatedCount: 0,
+    mitigatedCount: 1,
     resolvedCount: 1,
     currentPage: 1,
     totalPages: 1,
@@ -61,7 +75,7 @@ describe('TimelineMatrixGrid.vue', () => {
     expect(wrapper.text()).toContain('Total:')
     expect(wrapper.text()).toContain('Activas:')
     expect(wrapper.text()).toContain('Resueltas:')
-    expect(wrapper.findAll('.matrix-row').length).toBe(2)
+    expect(wrapper.findAll('.matrix-row').length).toBe(3)
   })
 
   it('steps year forward and backward', () => {
@@ -131,6 +145,18 @@ describe('TimelineMatrixGrid.vue', () => {
     expect(wrapper.emitted('update:selected-tags')?.[0]).toEqual([['prod']])
   })
 
+  it('filters agents and tags by search inputs', () => {
+    const wrapper = mount(TimelineMatrixGrid, {
+      props: defaultProps
+    })
+
+    wrapper.vm.search.agent = 'db'
+    expect(wrapper.vm.filteredAgents).toEqual(['srv-db'])
+
+    wrapper.vm.search.tag = 'lin'
+    expect(wrapper.vm.filteredTags).toEqual(['linux'])
+  })
+
   it('emits select-vuln on onVulnClick', () => {
     const wrapper = mount(TimelineMatrixGrid, {
       props: defaultProps
@@ -146,21 +172,58 @@ describe('TimelineMatrixGrid.vue', () => {
     })
 
     wrapper.vm.granularity = 'month'
+    wrapper.vm.selectedMonth = 1
     expect(wrapper.vm.granularity).toBe('month')
     expect(wrapper.vm.timeColumns.length).toBeGreaterThan(0)
 
     wrapper.vm.granularity = 'range'
+    wrapper.vm.rangeStartDate = '2026-03-01'
+    wrapper.vm.rangeEndDate = '2026-03-10'
     expect(wrapper.vm.granularity).toBe('range')
+    expect(wrapper.vm.timeColumns.length).toBe(10)
 
     wrapper.vm.granularity = 'year'
     expect(wrapper.vm.granularity).toBe('year')
     expect(wrapper.vm.timeColumns.length).toBe(12)
   })
 
-  it('clears all filters when resetAllFilters is called', () => {
+  it('manages date range changes and adjustments', () => {
     const wrapper = mount(TimelineMatrixGrid, {
       props: defaultProps
     })
+
+    // Start date change adjustments
+    wrapper.vm.rangeStartDate = '2026-01-01'
+    wrapper.vm.rangeEndDate = ''
+    wrapper.vm.onStartDateChange()
+    expect(wrapper.vm.rangeEndDate).toBe('2026-01-31')
+
+    wrapper.vm.rangeStartDate = '2026-02-01'
+    wrapper.vm.rangeEndDate = '2026-01-01' // Diff < 0
+    wrapper.vm.onStartDateChange()
+    expect(wrapper.vm.rangeEndDate).toBe('2026-03-03')
+
+    // End date change adjustments
+    wrapper.vm.rangeStartDate = ''
+    wrapper.vm.rangeEndDate = '2026-05-31'
+    wrapper.vm.onEndDateChange()
+    expect(wrapper.vm.rangeStartDate).toBe('2026-05-01')
+
+    wrapper.vm.clearDateRange()
+    expect(wrapper.vm.rangeStartDate).toBe('')
+    expect(wrapper.vm.rangeEndDate).toBe('')
+  })
+
+  it('clears all filters when resetAllFilters is called', () => {
+    const wrapper = mount(TimelineMatrixGrid, {
+      props: {
+        ...defaultProps,
+        selectedStatus: 'active',
+        selectedAgents: ['srv-db']
+      }
+    })
+
+    expect(wrapper.vm.hasActiveFilters).toBe(true)
 
     wrapper.vm.resetAllFilters()
     expect(wrapper.emitted('update:selected-status')?.[0]).toEqual(['all'])
@@ -169,7 +232,21 @@ describe('TimelineMatrixGrid.vue', () => {
     expect(wrapper.emitted('update:selected-tags')?.[0]).toEqual([[]])
   })
 
-  it('resolves cell state correctly for active and resolved vulns', () => {
+  it('returns appropriate severity classes', () => {
+    const wrapper = mount(TimelineMatrixGrid, {
+      props: defaultProps
+    })
+
+    expect(wrapper.vm.getSeverityClass('CRITICAL')).toBe('badge-critical')
+    expect(wrapper.vm.getSeverityClass('critica')).toBe('badge-critical')
+    expect(wrapper.vm.getSeverityClass('HIGH')).toBe('badge-high')
+    expect(wrapper.vm.getSeverityClass('alta')).toBe('badge-high')
+    expect(wrapper.vm.getSeverityClass('MEDIUM')).toBe('badge-medium')
+    expect(wrapper.vm.getSeverityClass('LOW')).toBe('badge-low')
+    expect(wrapper.vm.getSeverityClass('')).toBe('badge-low')
+  })
+
+  it('resolves cell state correctly across all branches', () => {
     const wrapper = mount(TimelineMatrixGrid, {
       props: defaultProps
     })
@@ -177,10 +254,26 @@ describe('TimelineMatrixGrid.vue', () => {
     const startJan = new Date('2026-01-01T00:00:00Z').getTime()
     const endJan = new Date('2026-01-31T23:59:59Z').getTime()
 
-    const cell1 = wrapper.vm.resolveCell(mockVulns[0], startJan, endJan)
-    expect(cell1.status).toBe('ACTIVE')
+    // Null or invalid vuln
+    expect(wrapper.vm.resolveCell(null, startJan, endJan).status).toBe('NONE')
+    expect(wrapper.vm.resolveCell({}, startJan, endJan).status).toBe('NONE')
+    expect(wrapper.vm.resolveCell({ first_seen: 'invalid' }, startJan, endJan).status).toBe('NONE')
 
-    const cell2 = wrapper.vm.resolveCell(mockVulns[1], startJan, endJan)
-    expect(cell2.status).toBe('NONE')
+    // History in slot
+    const cellResolvedHistory = wrapper.vm.resolveCell(mockVulns[2], startJan, endJan)
+    expect(cellResolvedHistory.status).toBe('RESOLVED')
+
+    // Fallback without history
+    const fallbackActive = { id: 10, status: 'ACTIVE', first_seen: '2026-01-01T00:00:00Z' }
+    expect(wrapper.vm.resolveCell(fallbackActive, startJan, endJan).status).toBe('ACTIVE')
+
+    const fallbackMitigated = { id: 13, status: 'MITIGATED', first_seen: '2026-01-01T00:00:00Z', last_seen: '2026-01-15T00:00:00Z' }
+    expect(wrapper.vm.resolveCell(fallbackMitigated, startJan, endJan).status).toBe('MITIGATED')
+
+    const fallbackResolvedInSlot = { id: 11, status: 'RESOLVED', first_seen: '2026-01-01T00:00:00Z', last_seen: '2026-01-15T00:00:00Z' }
+    expect(wrapper.vm.resolveCell(fallbackResolvedInSlot, startJan, endJan).status).toBe('RESOLVED')
+
+    const fallbackResolvedBeforeSlot = { id: 12, status: 'RESOLVED', first_seen: '2025-10-01T00:00:00Z', last_seen: '2025-11-01T00:00:00Z' }
+    expect(wrapper.vm.resolveCell(fallbackResolvedBeforeSlot, startJan, endJan).status).toBe('NONE')
   })
 })

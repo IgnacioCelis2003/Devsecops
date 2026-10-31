@@ -1006,5 +1006,53 @@ describe('Dashboard.vue', () => {
             await wrapper.vm.$nextTick()
             expect(wrapper.vm.showColumnPicker).toBe(false)
         })
+
+        it('supports column visibility customization, persistence, and resetting', async () => {
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            expect(wrapper.vm.isColVisible('severity')).toBe(true)
+
+            // Cannot toggle mandatory column
+            wrapper.vm.toggleColumn('severity')
+            expect(wrapper.vm.isColVisible('severity')).toBe(true)
+
+            // Can toggle optional column (e.g., 'package_version')
+            const wasVisible = wrapper.vm.isColVisible('package_version')
+            wrapper.vm.toggleColumn('package_version')
+            expect(wrapper.vm.isColVisible('package_version')).toBe(!wasVisible)
+
+            // Reset columns to default
+            wrapper.vm.resetColumnsToDefault()
+            expect(wrapper.vm.isColVisible('package_version')).toBe(wasVisible)
+
+            // Toggle and close picker
+            wrapper.vm.toggleColumnPicker()
+            expect(wrapper.vm.showColumnPicker).toBe(true)
+            wrapper.vm.closeColumnPicker()
+            expect(wrapper.vm.showColumnPicker).toBe(false)
+        })
+
+        it('handles onMatrixVulnSelect, status filtering, and count metrics', async () => {
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            // Counts
+            expect(wrapper.vm.activeCount).toBeGreaterThanOrEqual(0)
+            expect(wrapper.vm.resolvedCount).toBeGreaterThanOrEqual(0)
+            expect(wrapper.vm.mitigatedCount).toBeGreaterThanOrEqual(0)
+
+            // Status filter
+            wrapper.vm.setStatusFilter('active')
+            expect(wrapper.vm.selectedStatus).toBe('active')
+            wrapper.vm.setStatusFilter('resolved')
+            expect(wrapper.vm.selectedStatus).toBe('resolved')
+            wrapper.vm.setStatusFilter('all')
+            expect(wrapper.vm.selectedStatus).toBe('all')
+
+            // Select vuln from timeline matrix
+            wrapper.vm.onMatrixVulnSelect(1)
+            expect(wrapper.vm.highlightedVulnId).toBe(1)
+        })
     })
 })
