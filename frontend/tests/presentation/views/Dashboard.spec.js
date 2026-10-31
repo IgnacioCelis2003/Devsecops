@@ -1125,5 +1125,36 @@ describe('Dashboard.vue', () => {
                 status: ['RESOLVED', 'MITIGATED']
             }))
         })
+
+        it('supports sorting by tags and os_full and handles tag matching', async () => {
+            const sampleVulns = [
+                { id: 1, cve_id: 'CVE-1', tags: ['b', 'c'], os_full: 'Ubuntu 22.04', status: 'ACTIVE' },
+                { id: 2, cve_id: 'CVE-2', tags: ['a'], os_platform: 'Debian 11', status: 'ACTIVE' }
+            ]
+            vulnService.getVulns.mockResolvedValueOnce({ data: sampleVulns })
+
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            // Sort by tags
+            wrapper.vm.sortBy('tags')
+            expect(wrapper.vm.sortKey).toBe('tags')
+            expect(wrapper.vm.sortedVulns[0].id).toBe(2) // 1 tag vs 2 tags
+
+            // Sort by os_full
+            wrapper.vm.sortBy('os_full')
+            expect(wrapper.vm.sortKey).toBe('os_full')
+            expect(wrapper.vm.sortedVulns[0].id).toBe(2) // Debian vs Ubuntu
+
+            // Matches tags
+            wrapper.vm.selectedTags = ['a']
+            expect(wrapper.vm.filteredVulns.length).toBe(1)
+            expect(wrapper.vm.filteredVulns[0].id).toBe(2)
+
+            // onConnectionSelect
+            await wrapper.vm.onConnectionSelect(5)
+            expect(wrapper.vm.selectedConnection).toBe(5)
+            expect(vulnService.getVulns).toHaveBeenCalled()
+        })
     })
 })

@@ -285,6 +285,29 @@ describe('TimelineMatrixGrid.vue', () => {
     const cellResolvedHistory = wrapper.vm.resolveCell(mockVulns[2], startJan, endJan)
     expect(cellResolvedHistory.status).toBe('RESOLVED')
 
+    // History with DETECTED / REOPENED before slot
+    const vulnWithReopen = {
+      id: 20,
+      status: 'ACTIVE',
+      first_seen: '2025-11-01T00:00:00Z',
+      history: [
+        { action: 'RESOLVED', timestamp: '2025-12-01T00:00:00Z' },
+        { action: 'REOPENED', timestamp: '2025-12-15T00:00:00Z' }
+      ]
+    }
+    expect(wrapper.vm.resolveCell(vulnWithReopen, startJan, endJan).status).toBe('ACTIVE')
+
+    // History resolved before slot
+    const vulnResolvedBefore = {
+      id: 21,
+      status: 'RESOLVED',
+      first_seen: '2025-01-01T00:00:00Z',
+      history: [
+        { action: 'RESOLVED', timestamp: '2025-05-01T00:00:00Z' }
+      ]
+    }
+    expect(wrapper.vm.resolveCell(vulnResolvedBefore, startJan, endJan).status).toBe('NONE')
+
     // Fallback without history
     const fallbackActive = { id: 10, status: 'ACTIVE', first_seen: '2026-01-01T00:00:00Z' }
     expect(wrapper.vm.resolveCell(fallbackActive, startJan, endJan).status).toBe('ACTIVE')
@@ -297,5 +320,13 @@ describe('TimelineMatrixGrid.vue', () => {
 
     const fallbackResolvedBeforeSlot = { id: 12, status: 'RESOLVED', first_seen: '2025-10-01T00:00:00Z', last_seen: '2025-11-01T00:00:00Z' }
     expect(wrapper.vm.resolveCell(fallbackResolvedBeforeSlot, startJan, endJan).status).toBe('NONE')
+
+    const vulnResolvedLater = {
+      id: 22,
+      status: 'RESOLVED',
+      first_seen: '2026-01-01T00:00:00Z',
+      last_seen: '2026-05-01T00:00:00Z'
+    }
+    expect(wrapper.vm.resolveCell(vulnResolvedLater, startJan, endJan).status).toBe('ACTIVE')
   })
 })

@@ -140,6 +140,22 @@ describe('ConfigUser.vue', () => {
         expect(wrapper.vm.showModal).toBe(true)
     })
 
+    it('handles user creation failure with generic error', async () => {
+        const wrapper = mount(ConfigUser)
+        await flushPromises()
+
+        await wrapper.find('.btn-primary').trigger('click')
+        wrapper.vm.formUser.username = 'fail2'
+        wrapper.vm.formUser.password = 'pass'
+
+        userService.createUser.mockRejectedValueOnce(new Error('Network error'))
+
+        await wrapper.find('form').trigger('submit.prevent')
+        await flushPromises()
+
+        expect(wrapper.vm.error).toContain('Error al crear el usuario')
+    })
+
     it('opens edit modal and updates user successfully', async () => {
         const wrapper = mount(ConfigUser)
         await flushPromises()
@@ -168,6 +184,26 @@ describe('ConfigUser.vue', () => {
             tags: ['linux', 'production'],
             password: 'NewPass123'
         })
+        expect(wrapper.vm.showModal).toBe(false)
+    })
+
+    it('updates local user state when updateUser service call fails', async () => {
+        const wrapper = mount(ConfigUser)
+        await flushPromises()
+
+        const editBtn = wrapper.findAll('tbody tr')[1].findAll('.btn-icon')[0]
+        await editBtn.trigger('click')
+        await flushPromises()
+
+        wrapper.vm.formUser.role = 'viewer'
+        wrapper.vm.formUser.tags = ['staging']
+
+        userService.updateUser.mockRejectedValueOnce(new Error('Endpoint not implemented'))
+
+        await wrapper.find('form').trigger('submit.prevent')
+        await flushPromises()
+
+        expect(wrapper.vm.users[1].tags).toEqual(['staging'])
         expect(wrapper.vm.showModal).toBe(false)
     })
 
