@@ -328,5 +328,42 @@ describe('TimelineMatrixGrid.vue', () => {
       last_seen: '2026-05-01T00:00:00Z'
     }
     expect(wrapper.vm.resolveCell(vulnResolvedLater, startJan, endJan).status).toBe('ACTIVE')
+
+    // Mitigated in slot via history details
+    const vulnMitigatedHistory = {
+      id: 25,
+      status: 'MITIGATED',
+      first_seen: '2026-01-01T00:00:00Z',
+      history: [
+        { action: 'RULE_APPLIED', details: 'Mitigated by policy', timestamp: '2026-01-15T00:00:00Z' }
+      ]
+    }
+    expect(wrapper.vm.resolveCell(vulnMitigatedHistory, startJan, endJan).status).toBe('MITIGATED')
+
+    // Future vuln returns NONE
+    const vulnFuture = {
+      id: 26,
+      status: 'ACTIVE',
+      first_seen: '2026-06-01T00:00:00Z'
+    }
+    expect(wrapper.vm.resolveCell(vulnFuture, startJan, endJan).status).toBe('NONE')
+  })
+
+  it('computes min and max start and end dates and handles NaN year', () => {
+    const wrapper = mount(TimelineMatrixGrid, {
+      props: defaultProps
+    })
+
+    expect(wrapper.vm.minStartDate).toBe('')
+    expect(wrapper.vm.maxStartDate).toBe('')
+
+    wrapper.vm.rangeStartDate = '2026-03-01'
+    expect(wrapper.vm.minEndDate).toBe('2026-03-01')
+    expect(wrapper.vm.maxEndDate).toBe('2026-03-31')
+
+    wrapper.vm.yearInputValue = 'not-a-number'
+    wrapper.vm.applyYearInput()
+    expect(wrapper.vm.selectedYear).toBe(2026)
   })
 })
+

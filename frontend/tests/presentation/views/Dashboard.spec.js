@@ -3,6 +3,13 @@ import { mount, flushPromises } from '@vue/test-utils'
 import Dashboard from '@/presentation/views/Dashboard.vue'
 import vulnService from '@/application/services/vulnService'
 import wazuhService from '@/application/services/wazuhService'
+import Swal from 'sweetalert2'
+
+vi.mock('sweetalert2', () => ({
+    default: {
+        fire: vi.fn()
+    }
+}))
 
 vi.mock('@/application/services/vulnService', () => ({
     default: {
@@ -1155,6 +1162,24 @@ describe('Dashboard.vue', () => {
             await wrapper.vm.onConnectionSelect(5)
             expect(wrapper.vm.selectedConnection).toBe(5)
             expect(vulnService.getVulns).toHaveBeenCalled()
+        })
+        it('shows access denied Swal when access_denied_message is in sessionStorage', async () => {
+            sessionStorage.setItem('access_denied_message', 'Acceso denegado')
+            const wrapper = mount(Dashboard)
+            await flushPromises()
+
+            expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({
+                title: 'Acceso Restringido',
+                text: 'Acceso denegado'
+            }))
+            expect(sessionStorage.getItem('access_denied_message')).toBeNull()
+
+            // getTimelineProgress with explicit age
+            expect(wrapper.vm.getTimelineProgress({ dwell_time_days: 5, total_age_days: 10 })).toBe(50)
+            expect(wrapper.vm.getTimelineProgress({ dwell_time_days: 0, total_age_days: 10 })).toBe(0)
+
+            // isRecentlySeen within 60 mins
+            expect(wrapper.vm.isRecentlySeen(new Date().toISOString())).toBe(true)
         })
     })
 })

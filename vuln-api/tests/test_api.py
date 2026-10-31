@@ -946,3 +946,13 @@ def test_user_tag_filtering(mock_fetch, client, db_session):
     res = client.get("/vulns", headers=headers_viewer).json()
     assert res["total"] == 1
     assert res["items"][0]["cve_id"] == "CVE-2023-0001"
+
+
+def test_vulns_query_filters(client, db_session):
+    _create_user(db_session)
+    headers = _get_headers(client)
+    res = client.get(
+        "/vulns?score_min=4.0&score_max=9.5&search=bash&date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z",
+        headers=headers
+    )
+    assert res.status_code == 200
