@@ -1,6 +1,6 @@
 services:
   jenkins:
-    build: /home/fabian/vuln-app-wazuh/dev-tools/jenkins
+    build: .
     container_name: jenkins
     user: root
     ports:
@@ -31,4 +31,4 @@ networks:
     name: sonarqube_sonar-network
   app-network:
     external: true
-    name: vuln-app-wazuh_app-network
+    name: vulnapp_app-network

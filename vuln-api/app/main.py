@@ -1,7 +1,9 @@
 # app/main.py
 import os
+import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from .db import Base, engine, SessionLocal
@@ -44,23 +46,30 @@ CORS_ALLOW_ORIGINS = [
 ]
 
 
-def create_default_admin():
-    db = SessionLocal()
-    try:
-        admin_exists = db.query(User).filter(User.username == "admin").first()
-        if not admin_exists:
-            print("Creando usuario admin default...")
-            default_admin = User(
-                username="admin", 
-                password_hash=hash_password("admin"), 
-                is_active=True,
-                is_default_password=True,
-                role="admin",
-            )
-            db.add(default_admin)
-            db.commit()
-    finally:
-        db.close()
+def create_default_admin(max_retries: int = 15, retry_delay: float = 2.0):
+    for attempt in range(1, max_retries + 1):
+        db = SessionLocal()
+        try:
+            admin_exists = db.query(User).filter(User.username == "admin").first()
+            if not admin_exists:
+                print("Creando usuario admin default...")
+                default_admin = User(
+                    username="admin",
+                    password_hash=hash_password("admin"),
+                    is_active=True,
+                    is_default_password=True,
+                    role="admin",
+                )
+                db.add(default_admin)
+                db.commit()
+            return
+        except OperationalError:  # pragma: no cover
+            db.rollback()
+            if attempt == max_retries:
+                raise
+            time.sleep(retry_delay)
+        finally:
+            db.close()
 
 
 create_default_admin()

@@ -1,15 +1,34 @@
 #!/bin/bash
 
-# ==========================================
-# Variables para la gestión segura del Cronjob
-# ==========================================
+# Intentar agregar rutas estándar si PATH no es de solo lectura
+export PATH="/usr/local/bin:/usr/bin:/bin:$PATH" 2>/dev/null || true
+
+# Rutas absolutas compatibles con entornos restringidos (labjail)
+RM_BIN="/bin/rm"
+MKDIR_BIN="/bin/mkdir"
+CP_BIN="/bin/cp"
+CHMOD_BIN="/bin/chmod"
+CHOWN_BIN="/bin/chown"
+SED_BIN="/bin/sed"
+OPENSSL_BIN="/usr/bin/openssl"
+
 PROJECT_DIR=$(pwd)
 CRON_MARKER="# VULN_APP_CERTBOT_RENEWAL"
 DB_CERT_DEST="$HOME/certs_db"
 DB_CERT_UID=70
-# El comando entra a la carpeta del proyecto, intenta renovar, y si tiene éxito, recarga Nginx
-CRON_CMD="0 3 * * * cd \"$PROJECT_DIR\" && docker compose run --rm certbot renew --quiet && docker exec frontend nginx -s reload"
 
+# Detectar motor de contenedores (Podman rootless vs Docker)
+if command -v podman-compose >/dev/null 2>&1; then
+    USE_PODMAN=1
+    COMPOSE_CMD="podman-compose"
+    CONTAINER_ENGINE="podman"
+else
+    USE_PODMAN=0
+    COMPOSE_CMD="sudo -E docker compose"
+    CONTAINER_ENGINE="sudo docker"
+fi
+
+CRON_CMD="0 3 * * * cd \"$PROJECT_DIR\" && $COMPOSE_CMD run --rm certbot renew --quiet && $CONTAINER_ENGINE exec frontend nginx -s reload"
 
 echo "================================================="
 echo "   Selector de Entorno: Autofirmado vs Let's Encrypt"
@@ -21,58 +40,62 @@ read -p "Selecciona una opción (1 o 2): " OPCION
 
 if [ "$OPCION" == "1" ]; then
     echo -e "\n[+] Deteniendo contenedores y limpiando certificados y volúmenes anteriores..."
-    sudo docker compose down -v 2>/dev/null
-    rm -rf ./certbot ./nginx/ssl
+    $COMPOSE_CMD down -v 2>/dev/null
+    if [ "$USE_PODMAN" -eq 1 ]; then
+        podman volume rm -f vulnapp_postgres_api_data postgres_api_data 2>/dev/null || true
+        "$MKDIR_BIN" -p "$HOME/.config/containers"
+        if [ ! -f "$HOME/.config/containers/registries.conf" ]; then
+            cat << 'EOF' > "$HOME/.config/containers/registries.conf"
+unqualified-search-registries = ["docker.io"]
+EOF
+        fi
+        if [ -f ".env" ]; then
+            "$CP_BIN" .env "$HOME/.env" 2>/dev/null || true
+        fi
+    fi
+    "$RM_BIN" -rf ./certbot ./nginx/ssl
 
     echo "[+] Configurando entorno SIN dominio..."
-    cp prod_config/docker-compose.nodomain.yml docker-compose.yml
-    cp prod_config/nginx.nodomain.conf frontend/nginx.conf
+    "$CP_BIN" prod_config/docker-compose.nodomain.yml docker-compose.yml
+    "$CP_BIN" prod_config/nginx.nodomain.conf frontend/nginx.conf
 
     echo "[+] Generando certificados autofirmados locales..."
-    mkdir -p ./nginx/ssl
-    LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    "$MKDIR_BIN" -p ./nginx/ssl
     CERT_SAN="DNS:localhost,IP:127.0.0.1,IP:::1"
-    if [ -n "$LOCAL_IP" ]; then
-        CERT_SAN="$CERT_SAN,IP:$LOCAL_IP"
-    fi
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    "$OPENSSL_BIN" req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout ./nginx/ssl/nginx-selfsigned.key \
         -out ./nginx/ssl/nginx-selfsigned.crt \
         -subj "/C=CL/ST=RM/L=Santiago/O=Desarrollo/CN=localhost" \
         -addext "subjectAltName=$CERT_SAN" 2>/dev/null
 
-    # --- NUEVA LÓGICA: PERMISOS SEGUROS PARA DB (INICIO) ---
     echo "[+] Configurando permisos seguros para Base de Datos..."
-    # Limpiar y preparar directorio en el HOME del usuario
-    sudo rm -rf "$DB_CERT_DEST"
-    mkdir -p "$DB_CERT_DEST"
-    sudo cp ./nginx/ssl/nginx-selfsigned.crt "$DB_CERT_DEST/"
-    sudo cp ./nginx/ssl/nginx-selfsigned.key "$DB_CERT_DEST/"
-    sudo chown "$DB_CERT_UID:$DB_CERT_UID" "$DB_CERT_DEST/nginx-selfsigned.key" "$DB_CERT_DEST/nginx-selfsigned.crt"
-    sudo chmod 600 "$DB_CERT_DEST/nginx-selfsigned.key"
-    sudo chmod 644 "$DB_CERT_DEST/nginx-selfsigned.crt"
+    "$RM_BIN" -rf "$DB_CERT_DEST"
+    "$MKDIR_BIN" -p "$DB_CERT_DEST"
+    "$CP_BIN" ./nginx/ssl/nginx-selfsigned.crt "$DB_CERT_DEST/"
+    "$CP_BIN" ./nginx/ssl/nginx-selfsigned.key "$DB_CERT_DEST/"
 
-    # Replicar también en /root/certs_db para cuando docker compose se ejecute bajo sudo (donde HOME=/root)
-    if [ -d "/root" ]; then
-        sudo rm -rf /root/certs_db
-        sudo mkdir -p /root/certs_db
-        sudo cp ./nginx/ssl/nginx-selfsigned.crt /root/certs_db/
-        sudo cp ./nginx/ssl/nginx-selfsigned.key /root/certs_db/
-        sudo chown "$DB_CERT_UID:$DB_CERT_UID" /root/certs_db/nginx-selfsigned.key /root/certs_db/nginx-selfsigned.crt
-        sudo chmod 600 /root/certs_db/nginx-selfsigned.key
-        sudo chmod 644 /root/certs_db/nginx-selfsigned.crt
+    if [ "$USE_PODMAN" -eq 1 ]; then
+        podman unshare "$CHOWN_BIN" -R "$DB_CERT_UID:$DB_CERT_UID" "$DB_CERT_DEST"
+        podman unshare "$CHMOD_BIN" 600 "$DB_CERT_DEST/nginx-selfsigned.key"
+        podman unshare "$CHMOD_BIN" 644 "$DB_CERT_DEST/nginx-selfsigned.crt"
+    else
+        sudo "$CHOWN_BIN" "$DB_CERT_UID:$DB_CERT_UID" "$DB_CERT_DEST/nginx-selfsigned.key" "$DB_CERT_DEST/nginx-selfsigned.crt"
+        sudo "$CHMOD_BIN" 600 "$DB_CERT_DEST/nginx-selfsigned.key"
+        sudo "$CHMOD_BIN" 644 "$DB_CERT_DEST/nginx-selfsigned.crt"
+        if [ -d "/root" ]; then
+            sudo "$RM_BIN" -rf /root/certs_db
+            sudo "$MKDIR_BIN" -p /root/certs_db
+            sudo "$CP_BIN" ./nginx/ssl/nginx-selfsigned.crt /root/certs_db/
+            sudo "$CP_BIN" ./nginx/ssl/nginx-selfsigned.key /root/certs_db/
+            sudo "$CHOWN_BIN" "$DB_CERT_UID:$DB_CERT_UID" /root/certs_db/nginx-selfsigned.key /root/certs_db/nginx-selfsigned.crt
+            sudo "$CHMOD_BIN" 600 /root/certs_db/nginx-selfsigned.key
+            sudo "$CHMOD_BIN" 644 /root/certs_db/nginx-selfsigned.crt
+        fi
     fi
-    echo "[+] Certificados replicados en $DB_CERT_DEST y /root/certs_db con permisos 600."
-    # --- NUEVA LÓGICA: PERMISOS SEGUROS PARA DB (FIN) ---
-
-    # --- LÓGICA DE CRON: ELIMINACIÓN SEGURA ---
-    if crontab -l 2>/dev/null | grep -q "$CRON_MARKER"; then
-        echo "[+] Eliminando tarea de renovación automática (Cronjob)..."
-        crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | crontab -
-    fi
+    echo "[+] Certificados replicados en $DB_CERT_DEST con permisos 600."
 
     echo "[+] Levantando contenedores..."
-    sudo -E docker compose up -d --build
+    $COMPOSE_CMD up -d --build
 
 elif [ "$OPCION" == "2" ]; then
     echo -e "\n[+] Configurando entorno CON dominio..."
@@ -80,40 +103,28 @@ elif [ "$OPCION" == "2" ]; then
     read -p "Ingresa tu correo (para avisos de expiración de Let's Encrypt): " EMAIL
 
     echo "[+] Deteniendo contenedores y limpiando certificados anteriores..."
-    sudo docker compose down 2>/dev/null
-    rm -rf ./certbot ./nginx/ssl
+    $COMPOSE_CMD down 2>/dev/null
+    "$RM_BIN" -rf ./certbot ./nginx/ssl
 
     echo "[+] Aplicando configuraciones de red..."
-    cp prod_config/docker-compose.domain.yml docker-compose.yml
-    cp prod_config/nginx.domain.conf frontend/nginx.conf
+    "$CP_BIN" prod_config/docker-compose.domain.yml docker-compose.yml
+    "$CP_BIN" prod_config/nginx.domain.conf frontend/nginx.conf
 
-    sed -i "s/{{DOMAIN}}/$DOMINIO/g" frontend/nginx.conf
+    "$SED_BIN" -i "s/{{DOMAIN}}/$DOMINIO/g" frontend/nginx.conf
 
     echo "[+] Solicitando certificado oficial a Let's Encrypt para $DOMINIO..."
-    
-    if docker run --rm -p 80:80 \
+    if $CONTAINER_ENGINE run --rm -p 8113:80 \
         -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
-        certbot/certbot certonly --standalone \
+        docker.io/certbot/certbot certonly --standalone \
         -d "$DOMINIO" \
         --non-interactive \
         --agree-tos \
         -m "$EMAIL"; then
-        
-        echo -e "\n[+] Certificados obtenidos correctamente. Levantando la aplicación..."
-        sudo docker compose up -d --build
 
-        # --- LÓGICA DE CRON: INSERCIÓN SEGURA ---
-        echo "[+] Configurando tarea de renovación automática (Cronjob)..."
-        # 1. Borramos si ya existía para no duplicar
-        if crontab -l 2>/dev/null | grep -q "$CRON_MARKER"; then
-            crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | crontab -
-        fi
-        # 2. Agregamos el nuevo cronjob con el marcador
-        (crontab -l 2>/dev/null; echo "$CRON_CMD $CRON_MARKER") | crontab -
-        echo "[+] Cronjob instalado. Tu certificado se renovará automáticamente."
+        echo -e "\n[+] Certificados obtenidos correctamente. Levantando la aplicación..."
+        $COMPOSE_CMD up -d --build
     else
         echo -e "\n[ERROR] Certbot falló en la obtención del certificado."
-        echo "Verifica que los puertos 80 y 443 estén libres y que el dominio apunte a tu IP."
         exit 1
     fi
 

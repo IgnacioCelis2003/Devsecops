@@ -1,6 +1,6 @@
 #!/bin/bash
 BUILD_ID=$1
-NETWORK="vuln-app-wazuh_app-network"
+NETWORK="${APP_NETWORK:-vulnapp_app-network}"
 TARGET_API="http://api:8000/openapi.json"
 TARGET_FRONTEND="http://frontend:80"
 
