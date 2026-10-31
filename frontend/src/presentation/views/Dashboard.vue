@@ -1,23 +1,6 @@
 <template>
   <div class="fade-in dashboard-unified">
-    <!-- Header Area -->
-    <div class="header-actions">
-      <div>
-        <h1 class="title">Panorama de Amenazas & Línea de Tiempo</h1>
-        <p class="subtitle">Visualiza la evolución temporal de eventos y gestiona el inventario de vulnerabilidades reportado por Wazuh.</p>
-      </div>
-      <div>
-        <button v-if="isAdmin" class="btn btn-primary" @click="syncVulns" :disabled="syncing">
-          <svg v-if="syncing" class="spin" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.5l1.75 1.93"></path></svg>
-          {{ syncing ? 'Sincronizando con Wazuh...' : 'Forzar Sincronización' }}
-        </button>
-        <span v-else class="badge-viewer-notice" title="La sincronización está restringida al rol Administrador">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-          Modo Visualizador (Sincronización solo Admin)
-        </span>
-      </div>
-    </div>
+
 
     <!-- Error/Warning states -->
     <div v-if="error" class="alert alert-danger fade-in">
@@ -39,71 +22,52 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
           <h2 class="section-heading">Línea de Tiempo de Vulnerabilidades</h2>
         </div>
-        <span class="section-hint">Filtra por etiquetas, periodo temporal y estado para analizar la evolución</span>
-      </div>
 
-      <!-- Timeline Filter Controls (FILTRO GLOBAL UNIFICADO) -->
-      <TimelineFilters
-        :connections="connections"
-        :agent-options="agentOptions"
-        :vuln-options="vulnOptions"
-        :tag-options="tagOptions"
-        :severity-options="severityOptions"
-        :selected-connection="selectedConnection"
-        :selected-agents="selectedAgents"
-        :selected-vulns="selectedVulns"
-        :selected-tags="selectedTags"
-        :selected-severities="selectedSeverities"
-        :status="selectedStatus"
-        :period="period"
-        :periods="periods"
-        :custom-date="customDate"
-        :loading="timelineLoading"
-        @update:selected-connection="onConnectionSelect"
-        @update:selected-agents="selectedAgents = $event"
-        @update:selected-vulns="selectedVulns = $event"
-        @update:selected-tags="selectedTags = $event"
-        @update:selected-severities="selectedSeverities = $event"
-        @update:custom-date="customDate = $event"
-        @set-status="setStatusFilter"
-        @set-period="setPeriodFilter"
-        @connection-change="onConnectionChange"
-        @build="buildTimeline"
-      />
-
-      <!-- KPI Summary Strip -->
-      <TimelineKpiStrip
-        :has-built="hasBuilt"
-        :painted-count="paintedCount"
-        :latest-snap="latestSnap"
-      />
-
-      <!-- Interactive Canvas -->
-      <TimelineCanvas
-        v-if="hasBuilt && visibleSlots.length > 0"
-        :all-slots="allSlots"
-        :visible-slots="visibleSlots"
-        :painted-count="paintedCount"
-        :year-label="yearLabel"
-        :active-zoom="activeZoom"
-        :can-move-left="canMoveLeft"
-        :can-move-right="canMoveRight"
-        :can-zoom-in="canZoomIn"
-        :can-zoom-out="canZoomOut"
-        @move-left="moveLeft"
-        @move-right="moveRight"
-        @zoom-in="zoomIn"
-        @zoom-out="zoomOut"
-        @open-slot="openTimelineSlot"
-      />
-
-      <div v-else-if="!hasBuilt" class="card empty-timeline-card">
-        <div class="empty-center">
-          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-          <h3>Línea de tiempo sin generar</h3>
-          <p>Selecciona una conexión Wazuh y presiona <strong>"Generar Vista"</strong> para visualizar el historial temporal.</p>
+        <div class="title-bar-actions">
+          <button v-if="isAdmin" class="btn btn-primary btn-sync-header" @click="syncVulns" :disabled="syncing" title="Sincronizar nuevas detecciones con Wazuh">
+            <svg v-if="syncing" class="spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.5l1.75 1.93"></path></svg>
+            {{ syncing ? 'Sincronizando...' : 'Forzar Sincronización' }}
+          </button>
+          <span v-else class="badge-viewer-notice badge-viewer-notice-sm" title="La sincronización está restringida al rol Administrador">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            Modo Visualizador
+          </span>
         </div>
       </div>
+
+      <!-- Matriz Temporal Estilo Gantt con Barra Maestra Integrada (Opción A) -->
+      <TimelineMatrixGrid
+        :vulns="vulns"
+        :loading="loading || timelineLoading"
+        :connections="connections"
+        :selected-connection="selectedConnection"
+        :agent-options="agentOptions"
+        :selected-agents="selectedAgents"
+        :severity-options="severityOptions"
+        :selected-severities="selectedSeverities"
+        :tag-options="tagOptions"
+        :selected-tags="selectedTags"
+        :selected-status="selectedStatus"
+        :total-records="totalRecordsDisplay"
+        :active-count="activeCount"
+        :mitigated-count="mitigatedCount"
+        :resolved-count="resolvedCount"
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :items-per-page="itemsPerPage"
+        :per-page-options="perPageOptions"
+        @update:selected-connection="onConnectionSelect"
+        @update:selected-agents="selectedAgents = $event"
+        @update:selected-severities="selectedSeverities = $event"
+        @update:selected-tags="selectedTags = $event"
+        @update:selected-status="setStatusFilter"
+        @update:items-per-page="itemsPerPage = $event"
+        @prev-page="prevPage"
+        @next-page="nextPage"
+        @refresh="onConnectionChange"
+        @select-vuln="onMatrixVulnSelect"
+      />
     </section>
 
     <!-- ====================================================================== -->
@@ -114,7 +78,7 @@
         <div class="title-with-icon">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
           <h2 class="section-heading">Inventario de Vulnerabilidades (CVE)</h2>
-          <span class="count-pill">{{ sortedVulns.length }} CVEs filtrados</span>
+          <span class="count-pill">{{ totalRecordsDisplay }} CVEs filtrados</span>
         </div>
 
         <!-- Selector de Columnas Visibles (Top Right) -->
@@ -194,32 +158,23 @@
               </div>
             </div>
 
-            <div class="col-picker-footer">
-              <span class="cp-footer-note">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
-                <span><strong>Columnas fijas requeridas:</strong> Conexión, Severidad, CVSS y CVE ID.</span>
-              </span>
-            </div>
           </div>
         </div>
       </div>
 
-      <!-- Loading State -->
-      <div v-if="loading" class="empty-state">
+      <!-- Loading State Inicial (solo si la tabla no tiene datos aún) -->
+      <div v-if="loading && totalRecordsDisplay === 0 && (!vulns || vulns.length === 0)" class="empty-state">
         <div class="spinner-box">
           <svg class="spin" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
         </div>
         <p>Cargando datos del cluster...</p>
       </div>
 
-      <!-- Table Container -->
+      <!-- Table Container (permanece montado; no se destruye en transiciones de página) -->
       <div v-else class="card" style="padding: 0;">
         <div class="table-wrapper">
           <!-- Top Pagination & Controls Bar (Solo cuando hay registros) -->
-          <div v-if="sortedVulns.length > 0" class="table-controls-bar">
+          <div v-if="totalRecordsDisplay > 0" class="table-controls-bar">
             <div class="controls-left">
               <label class="per-page-selector">
                 <span class="label-text">Mostrar</span>
@@ -229,7 +184,7 @@
                 <span class="label-text">por página</span>
               </label>
               <span class="pagination-info">
-                Mostrando {{ sortedVulns.length ? (currentPage - 1) * itemsPerPage + 1 : 0 }} - {{ Math.min(currentPage * itemsPerPage, sortedVulns.length) }} de {{ sortedVulns.length }} vulnerabilidades
+                Mostrando {{ totalRecordsDisplay ? (currentPage - 1) * itemsPerPage + 1 : 0 }} - {{ Math.min(currentPage * itemsPerPage, totalRecordsDisplay) }} de {{ totalRecordsDisplay }} vulnerabilidades
               </span>
             </div>
 
@@ -252,7 +207,7 @@
           </div>
 
           <!-- The Table -->
-          <table v-if="sortedVulns.length > 0" class="vuln-table">
+          <table v-if="totalRecordsDisplay > 0" class="vuln-table">
             <caption class="visually-hidden">
               Tabla de vulnerabilidades con severidad, CVE, agente, software afectado y linea de tiempo de actividad.
             </caption>
@@ -430,7 +385,12 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="vuln in paginatedVulns" :key="vuln.id">
+              <tr
+                v-for="vuln in paginatedVulns"
+                :key="vuln.id"
+                :id="'vuln-row-' + vuln.id"
+                :class="{ 'row-matrix-highlighted': highlightedVulnId === vuln.id }"
+              >
                 <!-- 1. Conexión -->
                 <td v-if="isColVisible('connection_name')" :title="vuln.connection_name" class="cell-truncate">
                   {{ vuln.connection_name || '-' }}
@@ -574,7 +534,7 @@
           <!-- ================================================================ -->
           <!-- Paginación Completa Abajo (Solo cuando existen registros)          -->
           <!-- ================================================================ -->
-          <div v-if="sortedVulns.length > 0" class="pagination-footer-unified">
+          <div v-if="totalRecordsDisplay > 0" class="pagination-footer-unified">
             <div class="footer-left">
               <label class="per-page-selector">
                 <span class="label-text">Mostrar</span>
@@ -584,7 +544,7 @@
                 <span class="label-text">por página</span>
               </label>
               <span class="pagination-info">
-                Página {{ totalPages ? currentPage : 0 }} de {{ totalPages }} ({{ sortedVulns.length }} registros)
+                Página {{ totalPages ? currentPage : 0 }} de {{ totalPages }} ({{ totalRecordsDisplay }} registros)
               </span>
             </div>
 
@@ -667,6 +627,7 @@ import vClickOutside from '@/presentation/directives/clickOutside'
 import TimelineFilters from './timeline/components/TimelineFilters.vue'
 import TimelineKpiStrip from './timeline/components/TimelineKpiStrip.vue'
 import TimelineCanvas from './timeline/components/TimelineCanvas.vue'
+import TimelineMatrixGrid from './timeline/components/TimelineMatrixGrid.vue'
 import TimelineDetailModal from './timeline/components/TimelineDetailModal.vue'
 import useTimelineNavigation from './timeline/useTimelineNavigation'
 import useTimelineData from './timeline/useTimelineData'
@@ -770,6 +731,8 @@ const resetColumnsToDefault = () => {
 }
 
 const vulns = ref([])
+const totalRecords = ref(0)
+const isServerPaginated = ref(false)
 const loading = ref(true)
 const syncing = ref(false)
 const error = ref('')
@@ -777,11 +740,13 @@ const sortKey = ref('last_seen')
 const sortOrder = ref('desc')
 const showFilters = ref(false)
 
-// Paginación
+// Paginación de la Tabla de Inventario
 const currentPage = ref(1)
 const itemsPerPage = ref(50)
 const perPageOptions = [1, 5, 10, 25, 50, 100]
 const pageJump = 10
+
+
 
 // Filtros avanzados
 const connections = ref([])
@@ -865,6 +830,24 @@ const {
 
 allSlotsRef = allSlots
 
+const activeCount = computed(() => {
+  if (latestSnap.value && latestSnap.value.pending != null && latestSnap.value.pending > 0) {
+    return latestSnap.value.pending
+  }
+  return vulns.value.filter(v => (v.status || '').toUpperCase() === 'ACTIVE').length
+})
+
+const resolvedCount = computed(() => {
+  if (latestSnap.value && latestSnap.value.resolved != null && latestSnap.value.resolved > 0) {
+    return latestSnap.value.resolved
+  }
+  return vulns.value.filter(v => (v.status || '').toUpperCase() === 'RESOLVED').length
+})
+
+const mitigatedCount = computed(() => {
+  return vulns.value.filter(v => (v.status || '').toUpperCase() === 'MITIGATED').length
+})
+
 const {
   activeZoom,
   visibleCount,
@@ -915,6 +898,19 @@ const buildTimeline = async () => {
   } catch (err) {
     console.error('Error generating timeline:', err)
   }
+}
+
+const highlightedVulnId = ref(null)
+
+const onMatrixVulnSelect = (vulnId) => {
+  highlightedVulnId.value = vulnId
+  const el = document.getElementById(`vuln-row-${vulnId}`)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+  setTimeout(() => {
+    highlightedVulnId.value = null
+  }, 2500)
 }
 
 const openTimelineSlot = (slot) => {
@@ -1036,7 +1032,14 @@ const matchesTags = (vuln) => {
   return selectedTags.value.some(tag => vuln.tags.includes(tag))
 }
 
+const totalRecordsDisplay = computed(() => {
+  return isServerPaginated.value ? totalRecords.value : sortedVulns.value.length
+})
+
 const filteredVulns = computed(() => {
+  if (isServerPaginated.value) {
+    return vulns.value
+  }
   return vulns.value.filter(vuln => {
     return matchesConnection(vuln) &&
            matchesAgent(vuln) &&
@@ -1050,6 +1053,9 @@ const filteredVulns = computed(() => {
 })
 
 const sortedVulns = computed(() => {
+  if (isServerPaginated.value) {
+    return vulns.value
+  }
   if (!sortKey.value) return filteredVulns.value
   return [...filteredVulns.value].sort((a, b) => {
     const cmp = compareValues(a, b, sortKey.value)
@@ -1062,10 +1068,14 @@ const sortedVulns = computed(() => {
 // ============================================================================
 const totalPages = computed(() => {
   const size = itemsPerPage.value || 50
-  return Math.ceil(sortedVulns.value.length / size)
+  const total = totalRecordsDisplay.value
+  return Math.max(1, Math.ceil(total / size))
 })
 
 const paginatedVulns = computed(() => {
+  if (isServerPaginated.value) {
+    return vulns.value
+  }
   const size = itemsPerPage.value || 50
   const start = (currentPage.value - 1) * size
   const end = start + size
@@ -1118,19 +1128,40 @@ const jumpForward = () => {
   currentPage.value = Math.min(totalPages.value, currentPage.value + pageJump)
 }
 
-// Reset page on filter changes
-watch(selectedConnection, () => { currentPage.value = 1 })
-watch(selectedAgents, () => { currentPage.value = 1 })
-watch(selectedVulns, () => { currentPage.value = 1 })
-watch(selectedPackages, () => { currentPage.value = 1 })
-watch(selectedSeverities, () => { currentPage.value = 1 })
-watch(selectedTags, () => { currentPage.value = 1 })
-watch(selectedStatus, () => { currentPage.value = 1 })
-watch(scoreMin, () => { currentPage.value = 1 })
-watch(scoreMax, () => { currentPage.value = 1 })
-watch(sortKey, () => { currentPage.value = 1 })
-watch(sortOrder, () => { currentPage.value = 1 })
-watch(itemsPerPage, () => { currentPage.value = 1 })
+const onFilterOrSortChange = () => {
+  if (currentPage.value === 1) {
+    if (isServerPaginated.value) {
+      fetchVulns()
+    }
+  } else {
+    currentPage.value = 1
+  }
+}
+
+watch(currentPage, () => {
+  if (isServerPaginated.value) {
+    fetchVulns()
+  }
+})
+
+watch(itemsPerPage, () => {
+  onFilterOrSortChange()
+})
+
+watch([
+  selectedAgents,
+  selectedVulns,
+  selectedPackages,
+  selectedSeverities,
+  selectedTags,
+  selectedStatus,
+  scoreMin,
+  scoreMax,
+  sortKey,
+  sortOrder
+], () => {
+  onFilterOrSortChange()
+}, { deep: true })
 
 const sortBy = (key) => {
   if (sortKey.value !== key) {
@@ -1152,7 +1183,7 @@ const onConnectionChange = async () => {
   selectedTags.value = []
   scoreMin.value = ''
   scoreMax.value = ''
-  // Sincronizar inventario completo con la conexión seleccionada
+  // Sincronizar inventario completo con la conexión seleccionada (Backend Server-Side)
   await fetchVulns(selectedConnection.value)
   if (selectedConnection.value) {
     await buildTimeline()
@@ -1172,27 +1203,77 @@ const clearFilters = () => {
 }
 
 // ============================================================================
-// Carga de Datos API
+// Carga de Datos API (Server-Side Puro con Postgres LIMIT/OFFSET)
 // ============================================================================
 const fetchVulns = async (connectionId = null) => {
   loading.value = true
   error.value = ''
   try {
-    const params = { limit: 2000 }
     const connId = connectionId !== null ? connectionId : selectedConnection.value
+    const params = {
+      page: currentPage.value || 1,
+      pageSize: itemsPerPage.value || 50,
+      sortBy: sortKey.value || 'last_seen',
+      sortDir: sortOrder.value || 'desc',
+    }
     if (connId) {
       params.connectionId = connId
     }
+    if (selectedStatus.value && selectedStatus.value !== 'all') {
+      if (selectedStatus.value === 'active') {
+        params.status = ['ACTIVE']
+      } else if (selectedStatus.value === 'resolved') {
+        params.status = ['RESOLVED', 'MITIGATED']
+      }
+    }
+    if (selectedSeverities.value && selectedSeverities.value.length > 0) {
+      params.severity = selectedSeverities.value
+    }
+    if (selectedAgents.value && selectedAgents.value.length > 0) {
+      params.agentNames = selectedAgents.value
+    }
+    if (selectedVulns.value && selectedVulns.value.length > 0) {
+      params.cveIds = selectedVulns.value
+    }
+    if (selectedPackages.value && selectedPackages.value.length > 0) {
+      params.packageNames = selectedPackages.value
+    }
+    if (selectedTags.value && selectedTags.value.length > 0) {
+      params.tags = selectedTags.value
+    }
+    if (scoreMin.value !== '' && scoreMin.value != null) {
+      params.scoreMin = Number(scoreMin.value)
+    }
+    if (scoreMax.value !== '' && scoreMax.value != null) {
+      params.scoreMax = Number(scoreMax.value)
+    }
+
     const res = await vulnService.getVulns(params)
-    if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-      vulns.value = res.data
+
+    if (res?.data) {
+      if (res.data.items && Array.isArray(res.data.items)) {
+        isServerPaginated.value = true
+        vulns.value = res.data.items
+        totalRecords.value = res.data.total ?? res.data.items.length
+      } else if (Array.isArray(res.data)) {
+        isServerPaginated.value = false
+        vulns.value = res.data
+        totalRecords.value = res.data.length
+      } else {
+        vulns.value = []
+        totalRecords.value = 0
+        isServerPaginated.value = false
+      }
       updateFilterOptions()
     } else {
       vulns.value = []
+      totalRecords.value = 0
+      isServerPaginated.value = false
     }
   } catch (err) {
-    // Si falla la API, mantenemos estado controlado
     vulns.value = []
+    totalRecords.value = 0
+    isServerPaginated.value = false
   } finally {
     loading.value = false
   }
@@ -1202,6 +1283,9 @@ const fetchConnections = async () => {
   try {
     const res = await wazuhService.getConnections()
     connections.value = res?.data || []
+    if (!selectedConnection.value && connections.value.length > 0) {
+      selectedConnection.value = connections.value[0].id
+    }
   } catch (err) {
     connections.value = []
   }
@@ -1320,7 +1404,7 @@ const timeAgo = (date) => {
   return 'Justo ahora'
 }
 
-onMounted(() => {
+onMounted(async () => {
   const accessDeniedMsg = sessionStorage.getItem('access_denied_message')
   if (accessDeniedMsg) {
     sessionStorage.removeItem('access_denied_message')
@@ -1333,8 +1417,11 @@ onMounted(() => {
       color: 'var(--text-main)',
     })
   }
-  fetchConnections()
-  fetchVulns(selectedConnection.value)
+  await fetchConnections()
+  await fetchVulns(selectedConnection.value)
+  if (selectedConnection.value) {
+    buildTimeline()
+  }
 })
 </script>
 
@@ -1365,12 +1452,39 @@ onMounted(() => {
   font-size: 0.82rem;
   font-weight: 600;
 }
+.title-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-sync-header {
+  padding: 0.42rem 0.95rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: var(--radius-sm, 6px);
+  white-space: nowrap;
+}
+
+.badge-viewer-notice-sm {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  gap: 0.35rem;
+}
 
 /* Sections Styling */
 .unified-section {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.timeline-panel-section {
+  position: relative;
+  z-index: 25;
 }
 
 .section-title-bar,
@@ -1829,12 +1943,12 @@ th {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 440px;
-  max-width: 90vw;
+  width: 780px;
+  max-width: 95vw;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 10px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.18), 0 8px 12px -6px rgba(0, 0, 0, 0.1);
   z-index: 50;
   overflow: hidden;
   display: flex;
@@ -1845,7 +1959,7 @@ th {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.85rem 1.1rem;
+  padding: 0.85rem 1.15rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg-hover);
 }
@@ -1895,32 +2009,44 @@ th {
 }
 
 .col-picker-content {
-  padding: 1rem 1.1rem;
-  max-height: 340px;
+  padding: 1rem 1.15rem;
+  max-height: 420px;
   overflow-y: auto;
 }
 
-/* Image 3 Inspired Pill Chips */
+/* Grilla Horizontal de 4 Columnas para Pastillas */
 .pill-chips-container {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.55rem;
+}
+
+@media (max-width: 820px) {
+  .col-picker-popover {
+    width: 95vw;
+  }
+  .pill-chips-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .pill-chip-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.38rem 0.75rem;
+  gap: 0.45rem;
+  padding: 0.4rem 0.65rem;
   background: var(--bg-card);
   border: 1.5px solid var(--border);
   border-radius: 9999px;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: var(--text-main);
   cursor: pointer;
   user-select: none;
   transition: all 0.18s ease;
+  width: 100%;
+  justify-content: flex-start;
+  box-sizing: border-box;
 }
 
 .pill-chip-btn:hover:not(:disabled) {
@@ -2378,5 +2504,11 @@ th {
     align-items: flex-start;
     gap: 1rem;
   }
+}
+
+.row-matrix-highlighted {
+  background-color: rgba(99, 102, 241, 0.25) !important;
+  outline: 2px solid var(--primary);
+  transition: all 0.4s ease;
 }
 </style>

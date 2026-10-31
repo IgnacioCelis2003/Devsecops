@@ -310,7 +310,7 @@ const fetchAvailableTags = async () => {
   try {
     const res = await vulnService.getVulns({ limit: 500 })
     const tagSet = new Set()
-    const data = res?.data || []
+    const data = Array.isArray(res?.data) ? res.data : (res?.data?.items || [])
     if (Array.isArray(data)) {
       data.forEach(v => {
         if (Array.isArray(v.tags)) {

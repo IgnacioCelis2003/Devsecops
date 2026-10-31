@@ -21,7 +21,8 @@ describe('vulnService.js', () => {
         const result = await vulnService.getVulns()
 
         expect(apiClient.get).toHaveBeenCalledWith('/vulns', {
-            params: {}
+            params: {},
+            paramsSerializer: { indexes: null }
         })
         expect(result).toEqual(mockResponse)
     })
@@ -34,9 +35,35 @@ describe('vulnService.js', () => {
 
         expect(apiClient.get).toHaveBeenCalledWith('/vulns', {
             params: {
-                limit: 50,
+                page_size: 50,
                 connection_id: 2,
-            }
+            },
+            paramsSerializer: { indexes: null }
+        })
+        expect(result).toEqual(mockResponse)
+    })
+
+    it('getVulns supports server-side pagination, search and sort params', async () => {
+        const mockResponse = { data: { total: 100, page: 2, page_size: 25, items: [] } }
+        apiClient.get.mockResolvedValueOnce(mockResponse)
+
+        const result = await vulnService.getVulns({
+            page: 2,
+            pageSize: 25,
+            search: 'CVE-2023',
+            sortBy: 'severity',
+            sortDir: 'asc'
+        })
+
+        expect(apiClient.get).toHaveBeenCalledWith('/vulns', {
+            params: {
+                page: 2,
+                page_size: 25,
+                search: 'CVE-2023',
+                sort_by: 'severity',
+                sort_dir: 'asc',
+            },
+            paramsSerializer: { indexes: null }
         })
         expect(result).toEqual(mockResponse)
     })

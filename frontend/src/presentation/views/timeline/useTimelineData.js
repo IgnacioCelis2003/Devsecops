@@ -296,21 +296,50 @@ export default function useTimelineData({
   const paintedCount = computed(() => allSlots.value.filter(slot => slot.painted).length)
 
   const fetchConnectionVulns = async () => {
-    const response = await vulnService.getVulns({
-      connectionId: selectedConnection.value,
-      limit: LIMIT
-    })
+    if (!selectedConnection.value) return []
+    const allItems = []
+    const pageSize = 500
+    let page = 1
+    let total = 0
 
-    const data = Array.isArray(response.data) ? response.data : []
+    while (allItems.length < LIMIT) {
+      const response = await vulnService.getVulns({
+        connectionId: selectedConnection.value,
+        page,
+        pageSize,
+        sortBy: 'last_seen',
+        sortDir: 'desc'
+      })
 
-    if (data.length >= LIMIT) {
+      const resData = response?.data
+      let pageItems = []
+      if (Array.isArray(resData)) {
+        pageItems = resData
+        total = resData.length
+      } else if (resData?.items && Array.isArray(resData.items)) {
+        pageItems = resData.items
+        total = resData.total ?? pageItems.length
+      }
+
+      if (pageItems.length === 0) break
+
+      allItems.push(...pageItems)
+
+      if (allItems.length >= total || pageItems.length < pageSize) {
+        break
+      }
+
+      page++
+    }
+
+    if (total >= LIMIT || allItems.length >= LIMIT) {
       isTruncated.value = true
-      warningMessage.value = `Se alcanzaron ${LIMIT} registros. El analisis puede estar truncado.`
+      warningMessage.value = 'Se alcanzaron ' + LIMIT + ' registros. El analisis puede estar truncado.'
     } else {
       isTruncated.value = false
     }
 
-    return data
+    return allItems.slice(0, LIMIT)
   }
 
   const resetBuildState = () => {
