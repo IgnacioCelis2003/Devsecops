@@ -599,8 +599,6 @@ const selectedMonth = ref(2) // 0 = Ene, 2 = Mar (marzo de 2026)
 const rangeStartDate = ref('2026-03-01')
 const rangeEndDate = ref('2026-03-31')
 
-// Bandeja de filtros secundarios desplegable
-const showFiltersTray = ref(false)
 const search = reactive({ agent: '', tag: '' })
 const dropdowns = reactive({ agents: false, severity: false, tags: false, yearPicker: false })
 
@@ -647,15 +645,6 @@ const monthShortNames = [
   'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
 ]
 
-// Cantidad de filtros secundarios activos
-const activeFiltersCount = computed(() => {
-  let count = 0
-  if (props.selectedAgents && props.selectedAgents.length > 0) count++
-  if (props.selectedSeverities && props.selectedSeverities.length > 0) count++
-  if (props.selectedTags && props.selectedTags.length > 0) count++
-  return count
-})
-
 // Búsqueda en desplegables
 const filteredAgents = computed(() => {
   if (!search.agent) return props.agentOptions
@@ -690,12 +679,6 @@ const toggleTag = (tag) => {
   if (idx >= 0) current.splice(idx, 1)
   else current.push(tag)
   emit('update:selected-tags', current)
-}
-
-const resetSecondaryFilters = () => {
-  emit('update:selected-agents', [])
-  emit('update:selected-severities', [])
-  emit('update:selected-tags', [])
 }
 
 const hasActiveFilters = computed(() => {
@@ -1593,30 +1576,6 @@ const onVulnClick = (vulnId) => {
   color: var(--text-muted);
   text-align: center;
   padding: 0.5rem 0;
-}
-
-.tray-reset-wrap {
-  margin-left: auto;
-}
-
-.btn-clear-tray-filters {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: transparent;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #f87171;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.35rem 0.65rem;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-clear-tray-filters:hover {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: #ef4444;
 }
 
 /* ========================================================================== */

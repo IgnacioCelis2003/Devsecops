@@ -8,11 +8,6 @@
       {{ error }}
     </div>
 
-    <div v-if="timelineWarning" class="alert alert-warning fade-in">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-      {{ timelineWarning }}
-    </div>
-
     <!-- ====================================================================== -->
     <!-- SECCIÓN 1: LÍNEA DE TIEMPO (PARTE SUPERIOR)                            -->
     <!-- ====================================================================== -->
@@ -39,7 +34,7 @@
       <!-- Matriz Temporal Estilo Gantt con Barra Maestra Integrada (Opción A) -->
       <TimelineMatrixGrid
         :vulns="vulns"
-        :loading="loading || timelineLoading"
+        :loading="loading"
         :connections="connections"
         :selected-connection="selectedConnection"
         :agent-options="agentOptions"
@@ -609,12 +604,6 @@
       </div>
     </section>
 
-    <!-- Modal de detalle de la Línea de Tiempo -->
-    <TimelineDetailModal
-      :show="timelineModalOpen"
-      :event-data="selectedTimelineEvent"
-      @close="timelineModalOpen = false"
-    />
   </div>
 </template>
 
@@ -624,14 +613,7 @@ import Swal from 'sweetalert2'
 import vulnService from '../../application/services/vulnService'
 import wazuhService from '../../application/services/wazuhService'
 import vClickOutside from '@/presentation/directives/clickOutside'
-import TimelineFilters from './timeline/components/TimelineFilters.vue'
-import TimelineKpiStrip from './timeline/components/TimelineKpiStrip.vue'
-import TimelineCanvas from './timeline/components/TimelineCanvas.vue'
 import TimelineMatrixGrid from './timeline/components/TimelineMatrixGrid.vue'
-import TimelineDetailModal from './timeline/components/TimelineDetailModal.vue'
-import useTimelineNavigation from './timeline/useTimelineNavigation'
-import useTimelineData from './timeline/useTimelineData'
-import { fmtYear } from './timeline/timelineFormatters'
 
 // ============================================================================
 // Roles y Permisos
@@ -784,100 +766,19 @@ const filteredPackages = computed(() =>
 )
 
 // ============================================================================
-// Línea de Tiempo (Timeline Composable y Navegación)
+// Métricas y Selección en Matriz Temporal (Timeline)
 // ============================================================================
-const periods = [
-  { l: '24H', v: '24h' },
-  { l: '7D', v: '7d' },
-  { l: '30D', v: '30d' },
-  { l: 'Dia', v: 'day' },
-  { l: 'Todo', v: 'all' }
-]
-const period = ref('30d')
-const customDate = ref(new Date().toISOString().split('T')[0])
-const timelineModalOpen = ref(false)
-const selectedTimelineEvent = ref(null)
-
-const getConnectionName = () => {
-  const found = connections.value.find(conn => String(conn.id) === String(selectedConnection.value))
-  return found?.name || ''
-}
-
-let allSlotsRef = null
-const navigation = useTimelineNavigation(() => (allSlotsRef ? allSlotsRef.value.length : 0))
-
-const timelineData = useTimelineData({
-  selectedConnection,
-  selectedAgents,
-  selectedVulns,
-  selectedTags,
-  selectedStatus,
-  period,
-  customDate,
-  activeZoom: navigation.activeZoom,
-  getConnectionName
-})
-
-const {
-  loading: timelineLoading,
-  hasBuilt,
-  allSlots,
-  paintedCount,
-  latestSnap,
-  errorMessage: timelineError,
-  warningMessage: timelineWarning
-} = timelineData
-
-allSlotsRef = allSlots
-
 const activeCount = computed(() => {
-  if (latestSnap.value && latestSnap.value.pending != null && latestSnap.value.pending > 0) {
-    return latestSnap.value.pending
-  }
   return vulns.value.filter(v => (v.status || '').toUpperCase() === 'ACTIVE').length
 })
 
 const resolvedCount = computed(() => {
-  if (latestSnap.value && latestSnap.value.resolved != null && latestSnap.value.resolved > 0) {
-    return latestSnap.value.resolved
-  }
   return vulns.value.filter(v => (v.status || '').toUpperCase() === 'RESOLVED').length
 })
 
 const mitigatedCount = computed(() => {
   return vulns.value.filter(v => (v.status || '').toUpperCase() === 'MITIGATED').length
 })
-
-const {
-  activeZoom,
-  visibleCount,
-  viewStartIndex,
-  canMoveLeft,
-  canMoveRight,
-  canZoomIn,
-  canZoomOut,
-  setZoomLevel,
-  zoomIn,
-  zoomOut,
-  moveLeft,
-  moveRight,
-  jumpToEnd
-} = navigation
-
-const visibleSlots = computed(() =>
-  allSlots.value.slice(viewStartIndex.value, viewStartIndex.value + visibleCount.value)
-)
-
-const yearLabel = computed(() => {
-  if (!visibleSlots.value.length) return ''
-  const start = fmtYear(visibleSlots.value[0].startMs)
-  const end = fmtYear(visibleSlots.value[visibleSlots.value.length - 1].startMs)
-  return start === end ? start : `${start} - ${end}`
-})
-
-const setPeriodFilter = (val) => {
-  period.value = val
-}
 
 const setStatusFilter = (val) => {
   selectedStatus.value = val
@@ -887,17 +788,6 @@ const setStatusFilter = (val) => {
 const onConnectionSelect = async (val) => {
   selectedConnection.value = val
   await onConnectionChange()
-}
-
-const buildTimeline = async () => {
-  if (!selectedConnection.value) return
-  try {
-    const { initialZoom } = await timelineData.build()
-    setZoomLevel(initialZoom)
-    jumpToEnd()
-  } catch (err) {
-    console.error('Error generating timeline:', err)
-  }
 }
 
 const highlightedVulnId = ref(null)
@@ -911,11 +801,6 @@ const onMatrixVulnSelect = (vulnId) => {
   setTimeout(() => {
     highlightedVulnId.value = null
   }, 2500)
-}
-
-const openTimelineSlot = (slot) => {
-  selectedTimelineEvent.value = slot
-  timelineModalOpen.value = true
 }
 
 // ============================================================================
@@ -1185,9 +1070,7 @@ const onConnectionChange = async () => {
   scoreMax.value = ''
   // Sincronizar inventario completo con la conexión seleccionada (Backend Server-Side)
   await fetchVulns(selectedConnection.value)
-  if (selectedConnection.value) {
-    await buildTimeline()
-  }
+
 }
 
 const clearFilters = () => {
@@ -1301,9 +1184,7 @@ const syncVulns = async () => {
   try {
     await vulnService.syncVulns()
     await fetchVulns()
-    if (selectedConnection.value) {
-      await buildTimeline()
-    }
+
   } catch (err) {
     error.value = 'Error durante la sincronización con Wazuh. Verifica tu configuración en Admin Wazuh.'
   } finally {
@@ -1419,9 +1300,7 @@ onMounted(async () => {
   }
   await fetchConnections()
   await fetchVulns(selectedConnection.value)
-  if (selectedConnection.value) {
-    buildTimeline()
-  }
+
 })
 </script>
 
@@ -1524,41 +1403,8 @@ onMounted(async () => {
   color: var(--text-muted);
 }
 
-.filter-actions-right {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
 
-/* Empty Timeline Card */
-.empty-timeline-card {
-  min-height: 140px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  text-align: center;
-}
 
-.empty-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.empty-center h3 {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--text-main);
-  margin: 0;
-}
-
-.empty-center p {
-  font-size: 0.88rem;
-  color: var(--text-muted);
-  margin: 0;
-}
 
 /* Table Controls Bar (Top) */
 .table-controls-bar {

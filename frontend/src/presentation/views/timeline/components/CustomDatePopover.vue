@@ -199,10 +199,13 @@ const formattedFullDate = computed(() => {
 })
 
 // Construcción de la lista de meses continuos para la barra de desplazamiento
-// Cubre desde 2024 hasta 2027 (48 meses continuos navegables con scroll)
+// Dinámico: audita rangos históricos según minDate / maxDate o +/- años desde el año actual
 const monthsList = computed(() => {
-  const startYear = 2024
-  const endYear = 2027
+  const currentY = new Date().getFullYear()
+  const minYear = props.minDate ? new Date(props.minDate).getFullYear() : (currentY - 10)
+  const maxYear = props.maxDate ? new Date(props.maxDate).getFullYear() : (currentY + 2)
+  const startYear = Math.min(minYear, currentY - 10)
+  const endYear = Math.max(maxYear, currentY + 2)
   const list = []
 
   for (let y = startYear; y <= endYear; y++) {
