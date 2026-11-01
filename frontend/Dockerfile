@@ -7,10 +7,11 @@ RUN npm ci --ignore-scripts
 # Copiamos el código fuente
 COPY . .
 
-# Definimos que esperamos una variable llamada VITE_API_URL (por defecto /api)
-ARG VITE_API_URL=/api
-# La convertimos en variable de entorno para que Vite la vea durante el build
+# Definimos las variables de entorno para el build de Vite (con valores por defecto para grupo3)
+ARG VITE_API_URL=/grupo3/api
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_BASE=/grupo3/
+ENV VITE_BASE=$VITE_BASE
 
 RUN npm run build
 # ------------------------------

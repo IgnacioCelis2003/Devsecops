@@ -29,7 +29,8 @@ services:
     build:
       context: ./frontend
       args:
-        - VITE_API_URL=${VITE_API_URL:-/api}
+        - VITE_API_URL=${VITE_API_URL:-/grupo3/api}
+        - VITE_BASE=${VITE_BASE:-/grupo3/}
     container_name: frontend
     restart: unless-stopped
     env_file:
