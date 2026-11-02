@@ -1,7 +1,7 @@
 # app/routers/vulns_router.py
 from datetime import datetime, timezone
 from typing import Literal
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import (
     BigInteger,
     DateTime,
@@ -29,14 +29,19 @@ from ..models import (
 from ..auth import get_current_user_enforcing_password_change, require_admin
 from ..clients.wazuh_client import fetch_all_vulns
 from ..crypto import decrypt
-from ..services.wazuh_sync_service import process_wazuh_vulnerabilities
+from ..services.wazuh_sync_service import (
+    persist_vulnerability_events,
+    process_wazuh_vulnerabilities,
+)
 
 router = APIRouter()
 
 
 @router.post("/sync-all")
 def sync_all_connections(
-    db: Session = Depends(get_db), current_user: User = Depends(require_admin)
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
     conns = db.query(WazuhConnection).filter(WazuhConnection.is_active == True).all()
     results = []
@@ -49,8 +54,15 @@ def sync_all_connections(
                 decrypt(conn.wazuh_password),
             )
 
-            count = process_wazuh_vulnerabilities(db, conn.id, raw_vulns)
+            event_rows: list[dict] = []
+            count = process_wazuh_vulnerabilities(
+                db, conn.id, raw_vulns, event_sink=event_rows
+            )
             db.commit()
+            if event_rows:
+                background_tasks.add_task(
+                    persist_vulnerability_events, db.get_bind(), event_rows
+                )
 
             results.append({"connection": conn.name, "synced": count, "ok": True})
         except Exception as e:

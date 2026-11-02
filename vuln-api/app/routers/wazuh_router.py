@@ -1,17 +1,26 @@
 # app/routers/wazuh_router.py
 import os
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
 from ..db import get_db
-from ..models import User, WazuhConnection
+from ..models import (
+    User,
+    VulnerabilityHistory,
+    WazuhConnection,
+    WazuhVulnerability,
+)
 from ..auth import get_current_user_enforcing_password_change, require_admin
 from ..clients.wazuh_client import test_connection, fetch_all_vulns
 from ..crypto import encrypt, decrypt
 from ..schemas.wazuh_schemas import WazuhConnectionRequest
-from ..services.wazuh_sync_service import process_wazuh_vulnerabilities
+from ..services.wazuh_sync_service import (
+    persist_vulnerability_events,
+    process_wazuh_vulnerabilities,
+)
 
 router = APIRouter()
 
@@ -121,6 +130,20 @@ def delete_connection(
     conn = db.query(WazuhConnection).filter(WazuhConnection.id == conn_id).first()
     if not conn:
         raise HTTPException(status_code=404, detail=CONNECTION_NOT_FOUND)
+
+    vuln_ids = select(WazuhVulnerability.id).where(
+        WazuhVulnerability.connection_id == conn_id
+    )
+    db.execute(
+        delete(VulnerabilityHistory).where(
+            VulnerabilityHistory.vulnerability_id.in_(vuln_ids)
+        )
+    )
+    db.execute(
+        delete(WazuhVulnerability).where(
+            WazuhVulnerability.connection_id == conn_id
+        )
+    )
     db.delete(conn)
     db.commit()
     return {"message": "Conexión eliminada"}
@@ -151,6 +174,9 @@ def test_wazuh_connection(
 @router.post("/{conn_id}/sync")
 def sync_connection(
     conn_id: int,
+    background_tasks: BackgroundTasks,
+    agent_id: str | None = Query(None),
+    allow_empty: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -160,11 +186,40 @@ def sync_connection(
     if not conn.is_active:
         raise HTTPException(status_code=400, detail="La conexión está inactiva")
 
-    raw_vulns = fetch_all_vulns(
-        conn.indexer_url, conn.wazuh_user, decrypt(conn.wazuh_password)
-    )
+    try:
+        raw_vulns = fetch_all_vulns(
+            conn.indexer_url,
+            conn.wazuh_user,
+            decrypt(conn.wazuh_password),
+            agent_id=agent_id,
+        )
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=502,
+            detail="No se pudo consultar Wazuh; el inventario no se modificó.",
+        ) from exc
 
-    count = process_wazuh_vulnerabilities(db, conn.id, raw_vulns)
-    db.commit()
+    try:
+        event_rows: list[dict] = []
+        count = process_wazuh_vulnerabilities(
+            db,
+            conn.id,
+            raw_vulns,
+            agent_id=agent_id,
+            allow_empty=allow_empty,
+            event_sink=event_rows,
+        )
+        db.commit()
+        if event_rows:
+            background_tasks.add_task(
+                persist_vulnerability_events, db.get_bind(), event_rows
+            )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
 
-    return {"synced": count, "connection": conn.name}
+    return {"synced": count, "connection": conn.name, "agent_id": agent_id}

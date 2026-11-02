@@ -101,7 +101,10 @@ export default {
     return apiClient.get('/vulns', config)
   },
 
-  syncVulns: async () => {
-    return apiClient.post('/vulns/sync-all')
+  syncVulns: async (connectionId, agentId = null) => {
+    const url = `/wazuh-connections/${connectionId}/sync`
+    return agentId
+      ? apiClient.post(url, null, { params: { agent_id: agentId } })
+      : apiClient.post(url)
   },
 }
