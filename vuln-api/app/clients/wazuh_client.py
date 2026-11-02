@@ -22,7 +22,12 @@ def get_auth_header(user, password):
     return {"Authorization": f"Basic {encoded_auth}", "Content-Type": "application/json"}
 
 
-def fetch_all_vulns(indexer_url: str, wazuh_user: str, wazuh_password: str):
+def fetch_all_vulns(
+    indexer_url: str,
+    wazuh_user: str,
+    wazuh_password: str,
+    agent_id: str | None = None,
+):
     if not is_safe_url(indexer_url):
         raise ValueError(f"URL no permitida: {indexer_url}")
         
@@ -35,7 +40,11 @@ def fetch_all_vulns(indexer_url: str, wazuh_user: str, wazuh_password: str):
     body = {
         "size": 5000, # Tamaño por lote
         "_source": True,
-        "query": {"match_all": {}}
+        "query": (
+            {"term": {"agent.id": agent_id}}
+            if agent_id is not None
+            else {"match_all": {}}
+        ),
     }
 
     all_hits = []

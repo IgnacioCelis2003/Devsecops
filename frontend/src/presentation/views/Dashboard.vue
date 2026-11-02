@@ -19,10 +19,10 @@
         </div>
 
         <div class="title-bar-actions">
-          <button v-if="isAdmin" class="btn btn-primary btn-sync-header" @click="syncVulns" :disabled="syncing" title="Sincronizar nuevas detecciones con Wazuh">
-            <svg v-if="syncing" class="spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+          <button v-if="isAdmin" class="btn btn-primary btn-sync-header" @click="syncVulns" :disabled="syncing || !selectedConnection || selectedAgents.length !== 1" :title="selectedAgents.length === 1 ? `Sincronizar ${selectedAgents[0]}` : 'Selecciona un agente para sincronizar'">
+            <svg v-if="syncing" class="spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="18" y1="7.76" x2="19.07" y2="4.93"></line></svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.5l1.75 1.93"></path></svg>
-            {{ syncing ? 'Sincronizando...' : 'Forzar Sincronización' }}
+            {{ syncing ? 'Sincronizando...' : 'Sincronizar agente' }}
           </button>
           <span v-else class="badge-viewer-notice badge-viewer-notice-sm" title="La sincronización está restringida al rol Administrador">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
@@ -1154,9 +1154,7 @@ const fetchVulns = async (connectionId = null) => {
       isServerPaginated.value = false
     }
   } catch (err) {
-    vulns.value = []
-    totalRecords.value = 0
-    isServerPaginated.value = false
+    error.value = err.response?.data?.detail || 'No se pudieron cargar las vulnerabilidades.'
   } finally {
     loading.value = false
   }
@@ -1174,19 +1172,32 @@ const fetchConnections = async () => {
   }
 }
 
+const selectedAgentId = computed(() => {
+  if (selectedAgents.value.length !== 1) return null
+  const agentName = selectedAgents.value[0]
+  return vulns.value.find(v => v.agent_name === agentName)?.agent_id || null
+})
+
 const syncVulns = async () => {
   if (!isAdmin.value) {
-    error.value = 'Solo los administradores tienen permiso para forzar la sincronización.'
+    error.value = 'Solo los administradores tienen permiso para sincronizar agentes.'
+    return
+  }
+  if (!selectedConnection.value) {
+    error.value = 'Selecciona una conexión antes de sincronizar.'
+    return
+  }
+  if (!selectedAgentId.value) {
+    error.value = 'Selecciona un solo agente para sincronizar.'
     return
   }
   syncing.value = true
   error.value = ''
   try {
-    await vulnService.syncVulns()
+    await vulnService.syncVulns(selectedConnection.value, selectedAgentId.value)
     await fetchVulns()
-
   } catch (err) {
-    error.value = 'Error durante la sincronización con Wazuh. Verifica tu configuración en Admin Wazuh.'
+    error.value = err.response?.data?.detail || 'Error durante la sincronización con Wazuh. Verifica tu configuración en Admin Wazuh.'
   } finally {
     syncing.value = false
   }

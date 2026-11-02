@@ -34,6 +34,7 @@ describe('Dashboard.vue', () => {
             first_seen: new Date().toISOString(),
             last_seen: new Date().toISOString(), // More recent
             agent_name: 'Agent-1',
+            agent_id: '001',
             package_name: 'bash',
             package_version: '5.0'
         },
@@ -45,6 +46,7 @@ describe('Dashboard.vue', () => {
             first_seen: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
             last_seen: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // Older
             agent_name: 'Agent-2',
+            agent_id: '002',
             package_name: 'curl',
             package_version: '7.0'
         }
@@ -85,10 +87,27 @@ describe('Dashboard.vue', () => {
         await flushPromises()
 
         expect(wrapper.vm.loading).toBe(false)
-        expect(wrapper.vm.error).toBe('')
+        expect(wrapper.vm.error).toBe('No se pudieron cargar las vulnerabilidades.')
     })
 
-    it('syncs vulns correctly', async () => {
+    it('preserves existing vulnerabilities when a refresh fails', async () => {
+        vulnService.getVulns.mockResolvedValueOnce({ data: mockVulns })
+
+        const wrapper = mount(Dashboard)
+        await flushPromises()
+
+        expect(wrapper.vm.vulns.length).toBe(2)
+        expect(wrapper.vm.totalRecords).toBe(2)
+
+        vulnService.getVulns.mockRejectedValueOnce(new Error('Network error'))
+        await wrapper.vm.fetchVulns()
+
+        expect(wrapper.vm.vulns.length).toBe(2)
+        expect(wrapper.vm.totalRecords).toBe(2)
+        expect(wrapper.vm.error).toBe('No se pudieron cargar las vulnerabilidades.')
+    })
+
+    it('syncs the selected agent and refreshes the table', async () => {
         vulnService.getVulns.mockResolvedValue({ data: mockVulns })
         vulnService.syncVulns.mockResolvedValueOnce({})
 
@@ -96,13 +115,62 @@ describe('Dashboard.vue', () => {
         await flushPromises() // Wait for initial fetch
 
         expect(vulnService.getVulns).toHaveBeenCalledTimes(1)
+        wrapper.vm.selectedConnection = 4
+        wrapper.vm.selectedAgents = ['Agent-1']
 
         // Trigger sync
         await wrapper.vm.syncVulns()
 
         expect(wrapper.vm.syncing).toBe(false)
-        expect(vulnService.syncVulns).toHaveBeenCalledTimes(1)
+        expect(vulnService.syncVulns).toHaveBeenCalledWith(4, '001')
         expect(vulnService.getVulns).toHaveBeenCalledTimes(2) // Fetches again after sync
+    })
+
+    it('requires a single selected agent to sync', async () => {
+        vulnService.getVulns.mockResolvedValue({ data: mockVulns })
+
+        const wrapper = mount(Dashboard)
+        await flushPromises()
+
+        wrapper.vm.selectedConnection = 4
+        wrapper.vm.selectedAgents = []
+
+        await wrapper.vm.syncVulns()
+
+        expect(vulnService.syncVulns).not.toHaveBeenCalled()
+        expect(wrapper.vm.error).toContain('Selecciona un solo agente')
+    })
+
+    it('requires a connection before syncing', async () => {
+        vulnService.getVulns.mockResolvedValue({ data: mockVulns })
+
+        const wrapper = mount(Dashboard)
+        await flushPromises()
+
+        wrapper.vm.selectedConnection = ''
+        wrapper.vm.selectedAgents = ['Agent-1']
+
+        await wrapper.vm.syncVulns()
+
+        expect(vulnService.syncVulns).not.toHaveBeenCalled()
+        expect(wrapper.vm.error).toContain('Selecciona una conexión')
+    })
+
+    it('shows the backend detail when sync fails', async () => {
+        vulnService.getVulns.mockResolvedValue({ data: mockVulns })
+        vulnService.syncVulns.mockRejectedValueOnce({
+            response: { data: { detail: 'Wazuh devolvió 0 vulnerabilidades' } }
+        })
+
+        const wrapper = mount(Dashboard)
+        await flushPromises()
+
+        wrapper.vm.selectedConnection = 4
+        wrapper.vm.selectedAgents = ['Agent-1']
+        await wrapper.vm.syncVulns()
+
+        expect(wrapper.vm.syncing).toBe(false)
+        expect(wrapper.vm.error).toBe('Wazuh devolvió 0 vulnerabilidades')
     })
 
     it('shows error when sync fails', async () => {
@@ -112,6 +180,8 @@ describe('Dashboard.vue', () => {
         const wrapper = mount(Dashboard)
         await flushPromises() // initial fetch
 
+        wrapper.vm.selectedConnection = 4
+        wrapper.vm.selectedAgents = ['Agent-1']
         await wrapper.vm.syncVulns()
         expect(wrapper.vm.syncing).toBe(false)
         expect(wrapper.vm.error).toContain('Error durante la sincronización')

@@ -144,14 +144,29 @@ describe('vulnService.js', () => {
         expect(result).toEqual(mockResponse)
     })
 
-    it('syncVulns calls apiClient.post on /vulns/sync-all', async () => {
+    it('syncVulns calls the selected connection sync endpoint', async () => {
         const mockResponse = { data: { synced: 10 } }
 
         apiClient.post.mockResolvedValueOnce(mockResponse)
 
-        const result = await vulnService.syncVulns()
+        const result = await vulnService.syncVulns(4)
 
-        expect(apiClient.post).toHaveBeenCalledWith('/vulns/sync-all')
+        expect(apiClient.post).toHaveBeenCalledWith('/wazuh-connections/4/sync')
+        expect(result).toEqual(mockResponse)
+    })
+
+    it('syncVulns sends agent_id when an agent is selected', async () => {
+        const mockResponse = { data: { synced: 1 } }
+
+        apiClient.post.mockResolvedValueOnce(mockResponse)
+
+        const result = await vulnService.syncVulns(4, '001')
+
+        expect(apiClient.post).toHaveBeenCalledWith(
+            '/wazuh-connections/4/sync',
+            null,
+            { params: { agent_id: '001' } },
+        )
         expect(result).toEqual(mockResponse)
     })
 })

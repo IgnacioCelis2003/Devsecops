@@ -168,9 +168,17 @@ def process_wazuh_vulnerabilities(
     db: Session,
     conn_id: int,
     raw_vulns: list,
+    agent_id: str | None = None,
+    allow_empty: bool = False,
 ) -> int:
     _acquire_sync_lock(db, conn_id)
     normalized_vulns = normalize_wazuh_vulnerabilities(raw_vulns)
+    if agent_id is not None:
+        normalized_vulns = [
+            item
+            for item in normalized_vulns
+            if str(item["agent_id"]) == str(agent_id)
+        ]
     unique_vulns = {}
     for item in normalized_vulns:
         key = vulnerability_key(
@@ -182,11 +190,25 @@ def process_wazuh_vulnerabilities(
         )
         unique_vulns[key] = item
     normalized_vulns = list(unique_vulns.values())
-    existing_rows = (
-        db.query(WazuhVulnerability)
-        .filter(WazuhVulnerability.connection_id == conn_id)
-        .all()
+
+    existing_query = db.query(WazuhVulnerability).filter(
+        WazuhVulnerability.connection_id == conn_id
     )
+    if agent_id is not None:
+        existing_query = existing_query.filter(
+            WazuhVulnerability.agent_id == agent_id
+        )
+
+    if not normalized_vulns and not allow_empty:
+        active_count = existing_query.filter(
+            WazuhVulnerability.status == "ACTIVE"
+        ).count()
+        if active_count:
+            raise ValueError(
+                "Wazuh devolvió 0 vulnerabilidades; se conserva el inventario existente."
+            )
+
+    existing_rows = existing_query.all()
     existing_by_key = {
         vulnerability_key(
             row.connection_id,

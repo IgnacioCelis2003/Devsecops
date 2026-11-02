@@ -52,6 +52,7 @@ def _create_vuln(
     agent_id="001",
     agent_name="host-1",
     package_name="pkg",
+    package_version="1.0",
     detected_at=None,
     score_base=None,
     tags=None,
@@ -63,7 +64,7 @@ def _create_vuln(
         agent_id=agent_id,
         agent_name=agent_name,
         package_name=package_name,
-        package_version="1.0",
+        package_version=package_version,
         cve_id=cve,
         severity=severity,
         score_base=score_base,
@@ -488,6 +489,31 @@ def test_delete_connection(client, db_session):
     assert client.delete(f"/wazuh-connections/{conn.id}", headers=_get_headers(client)).status_code == 200
 
 
+def test_delete_connection_with_vulnerabilities(client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    vulns = [
+        _create_vuln(db_session, conn, "CVE-2023-0001"),
+        _create_vuln(db_session, conn, "CVE-2023-0002", agent_id="002"),
+    ]
+    for vuln in vulns:
+        db_session.add(VulnerabilityHistory(
+            vulnerability_id=vuln.id,
+            action="DETECTED",
+            details="test",
+        ))
+    db_session.commit()
+
+    res = client.delete(
+        f"/wazuh-connections/{conn.id}",
+        headers=_get_headers(client),
+    )
+
+    assert res.status_code == 200
+    assert db_session.query(WazuhVulnerability).count() == 0
+    assert db_session.query(VulnerabilityHistory).count() == 0
+
+
 def test_delete_nonexistent_connection(client, db_session):
     _create_user(db_session)
     assert client.delete("/wazuh-connections/9999", headers=_get_headers(client)).status_code == 404
@@ -538,6 +564,134 @@ def test_sync_nonexistent_connection(client, db_session):
                        headers=_get_headers(client)).status_code == 404
 
 
+@patch("app.routers.wazuh_router.fetch_all_vulns", side_effect=Exception("unreachable"))
+def test_sync_failure_preserves_existing_vulns(mock_fetch, client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    vuln = _create_vuln(db_session, conn, "CVE-2023-0001")
+    headers = _get_headers(client)
+
+    res = client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+
+    assert res.status_code == 502
+    db_session.refresh(vuln)
+    assert vuln.status == "ACTIVE"
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns", return_value=[])
+def test_sync_empty_payload_preserves_existing_vulns(mock_fetch, client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    vuln = _create_vuln(db_session, conn, "CVE-2023-0001")
+    headers = _get_headers(client)
+
+    res = client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+
+    assert res.status_code == 409
+    db_session.refresh(vuln)
+    assert vuln.status == "ACTIVE"
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns", return_value=[])
+def test_agent_sync_does_not_resolve_other_agents(mock_fetch, client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    target = _create_vuln(db_session, conn, "CVE-2023-0001", agent_id="001")
+    other = _create_vuln(db_session, conn, "CVE-2023-0002", agent_id="002")
+    headers = _get_headers(client)
+
+    res = client.post(
+        f"/wazuh-connections/{conn.id}/sync?agent_id=001&allow_empty=true",
+        headers=headers,
+    )
+
+    assert res.status_code == 200
+    mock_fetch.assert_called_once_with(
+        conn.indexer_url, conn.wazuh_user, "secret", agent_id="001"
+    )
+    db_session.refresh(target)
+    db_session.refresh(other)
+    assert target.status == "RESOLVED"
+    assert other.status == "ACTIVE"
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_agent_sync_ignores_payload_for_other_agents(mock_fetch, client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    target = _create_vuln(
+        db_session,
+        conn,
+        "CVE-2023-0001",
+        agent_id="001",
+        package_name="openssl",
+        package_version="1.1.1",
+    )
+    other = _create_vuln(
+        db_session,
+        conn,
+        "CVE-2023-0002",
+        agent_id="002",
+        status="RESOLVED",
+        package_name="curl",
+        package_version="7.81",
+    )
+    raw_other = _raw_vuln("CVE-2023-0002")
+    raw_other[0]["agent"]["id"] = "002"
+    raw_other[0]["agent"]["name"] = "host-2"
+    mock_fetch.return_value = MOCK_VULN + raw_other
+
+    res = client.post(
+        f"/wazuh-connections/{conn.id}/sync?agent_id=001",
+        headers=_get_headers(client),
+    )
+
+    assert res.status_code == 200
+    db_session.refresh(target)
+    db_session.refresh(other)
+    assert target.status == "ACTIVE"
+    assert other.status == "RESOLVED"
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns", return_value=[])
+def test_sync_empty_payload_without_active_inventory(mock_fetch, client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    vuln = _create_vuln(
+        db_session, conn, "CVE-2023-0001", agent_id="001", status="RESOLVED"
+    )
+
+    res = client.post(
+        f"/wazuh-connections/{conn.id}/sync?agent_id=001",
+        headers=_get_headers(client),
+    )
+
+    assert res.status_code == 200
+    assert res.json()["synced"] == 0
+    db_session.refresh(vuln)
+    assert vuln.status == "RESOLVED"
+
+
+@patch(
+    "app.routers.wazuh_router.process_wazuh_vulnerabilities",
+    side_effect=RuntimeError("boom"),
+)
+@patch("app.routers.wazuh_router.fetch_all_vulns", return_value=MOCK_VULN)
+def test_sync_unexpected_error_rolls_back(mock_fetch, mock_process, client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    vuln = _create_vuln(db_session, conn, "CVE-2023-0001")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        client.post(
+            f"/wazuh-connections/{conn.id}/sync",
+            headers=_get_headers(client),
+        )
+
+    db_session.refresh(vuln)
+    assert vuln.status == "ACTIVE"
+
+
 # sync all
 
 @patch("app.routers.vulns_router.fetch_all_vulns", return_value=MOCK_VULN)
@@ -556,6 +710,19 @@ def test_sync_all_partial_failure(mock_fetch, client, db_session):
     _create_connection(db_session)
     result = client.post("/vulns/sync-all", headers=_get_headers(client)).json()[0]
     assert result["ok"] is False
+
+
+@patch("app.routers.vulns_router.fetch_all_vulns", return_value=[])
+def test_sync_all_empty_payload_preserves_inventory(mock_fetch, client, db_session):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+    vuln = _create_vuln(db_session, conn, "CVE-2023-0001")
+
+    result = client.post("/vulns/sync-all", headers=_get_headers(client)).json()[0]
+
+    assert result["ok"] is False
+    db_session.refresh(vuln)
+    assert vuln.status == "ACTIVE"
 
 
 def test_sync_all_skips_inactive(client, db_session):
@@ -825,7 +992,10 @@ def test_vuln_resolved_when_absent_from_payload(mock_fetch, client, db_session):
     headers = _get_headers(client)
     client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
     mock_fetch.return_value = []
-    client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+    client.post(
+        f"/wazuh-connections/{conn.id}/sync?allow_empty=true",
+        headers=headers,
+    )
     vuln = db_session.query(WazuhVulnerability).first()
     assert vuln.status == "RESOLVED"
     event_types = [
@@ -910,6 +1080,10 @@ def test_viewer_role_forbidden_actions(client, db_session):
 
     res2 = client.post("/users", json={"username": "new", "password": "123"}, headers=headers)
     assert res2.status_code == 403
+
+    conn = _create_connection(db_session)
+    res3 = client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
+    assert res3.status_code == 403
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")

@@ -54,11 +54,28 @@ def test_fetch_all_vulns_success(mock_delete, mock_post):
     
     # Verify post was called 3 times (1 initial + 2 scroll calls)
     assert mock_post.call_count == 3
+    assert mock_post.call_args_list[0].kwargs["json"]["query"] == {"match_all": {}}
     
     # Verify delete was called once in the finally block
     mock_delete.assert_called_once()
     delete_kwargs = mock_delete.call_args[1]
     assert delete_kwargs["json"] == {"scroll_id": ["scroll_123"]}
+
+@patch("app.clients.wazuh_client.requests.post")
+@patch("app.clients.wazuh_client.requests.delete")
+def test_fetch_all_vulns_filters_by_agent(mock_delete, mock_post):
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "_scroll_id": "scroll_123",
+        "hits": {"hits": []},
+    }
+    mock_post.return_value = mock_resp
+
+    wazuh_client.fetch_all_vulns("http://localhost", "user", "pass", agent_id="001")
+
+    body = mock_post.call_args.kwargs["json"]
+    assert body["query"] == {"term": {"agent.id": "001"}}
+
 
 @patch("app.clients.wazuh_client.requests.post")
 @patch("app.clients.wazuh_client.requests.delete")
