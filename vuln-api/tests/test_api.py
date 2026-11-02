@@ -201,6 +201,21 @@ def test_sync_vulnerabilities_success(mock_fetch, client, db_session):
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_sync_vulnerabilities_allows_authenticated_viewer(mock_fetch, client, db_session):
+    _create_user(db_session, username="viewer", password="viewer", role="viewer")
+    conn = _create_connection(db_session)
+    mock_fetch.return_value = _raw_vuln()
+
+    response = client.post(
+        f"/wazuh-connections/{conn.id}/sync?agent_id=001",
+        headers=_get_headers(client, username="viewer", password="viewer"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["agent_id"] == "001"
+
+
+@patch("app.routers.wazuh_router.fetch_all_vulns")
 def test_sync_persists_vulnerability_metadata(mock_fetch, client, db_session):
     mock_fetch.return_value = _raw_vuln()
     _create_user(db_session)

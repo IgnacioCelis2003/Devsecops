@@ -19,15 +19,11 @@
         </div>
 
         <div class="title-bar-actions">
-          <button v-if="isAdmin" class="btn btn-primary btn-sync-header" @click="syncVulns" :disabled="syncing || !selectedConnection || selectedAgents.length !== 1" :title="selectedAgents.length === 1 ? `Sincronizar ${selectedAgents[0]}` : 'Selecciona un agente para sincronizar'">
+          <button class="btn btn-primary btn-sync-header" @click="syncVulns" :disabled="syncing || !selectedConnection || selectedAgents.length !== 1" :title="selectedAgents.length === 1 ? `Sincronizar ${selectedAgents[0]}` : 'Selecciona un agente para sincronizar'">
             <svg v-if="syncing" class="spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="18" y1="7.76" x2="19.07" y2="4.93"></line></svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.5l1.75 1.93"></path></svg>
             {{ syncing ? 'Sincronizando...' : 'Sincronizar agente' }}
           </button>
-          <span v-else class="badge-viewer-notice badge-viewer-notice-sm" title="La sincronización está restringida al rol Administrador">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-            Modo Visualizador
-          </span>
         </div>
       </div>
 
@@ -616,14 +612,6 @@ import vClickOutside from '@/presentation/directives/clickOutside'
 import TimelineMatrixGrid from './timeline/components/TimelineMatrixGrid.vue'
 
 // ============================================================================
-// Roles y Permisos
-// ============================================================================
-const isAdmin = computed(() => {
-  const current = localStorage.getItem('role') || 'viewer'
-  return current === 'admin'
-})
-
-// ============================================================================
 // Estado General de Vulnerabilidades (Tabla)
 // ============================================================================
 // ============================================================================
@@ -1179,10 +1167,6 @@ const selectedAgentId = computed(() => {
 })
 
 const syncVulns = async () => {
-  if (!isAdmin.value) {
-    error.value = 'Solo los administradores tienen permiso para sincronizar agentes.'
-    return
-  }
   if (!selectedConnection.value) {
     error.value = 'Selecciona una conexión antes de sincronizar.'
     return

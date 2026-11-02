@@ -178,7 +178,7 @@ def sync_connection(
     agent_id: str | None = Query(None),
     allow_empty: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user_enforcing_password_change),
 ):
     conn = db.query(WazuhConnection).filter(WazuhConnection.id == conn_id).first()
     if not conn:
