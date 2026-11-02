@@ -107,7 +107,7 @@ describe('Dashboard.vue', () => {
         expect(wrapper.vm.error).toBe('No se pudieron cargar las vulnerabilidades.')
     })
 
-    it('syncs the selected agent and refreshes the table', async () => {
+    it('syncs the selected Wazuh connection and refreshes the table', async () => {
         vulnService.getVulns.mockResolvedValue({ data: mockVulns })
         vulnService.syncVulns.mockResolvedValueOnce({})
 
@@ -122,23 +122,8 @@ describe('Dashboard.vue', () => {
         await wrapper.vm.syncVulns()
 
         expect(wrapper.vm.syncing).toBe(false)
-        expect(vulnService.syncVulns).toHaveBeenCalledWith(4, '001')
+        expect(vulnService.syncVulns).toHaveBeenCalledWith(4)
         expect(vulnService.getVulns).toHaveBeenCalledTimes(2) // Fetches again after sync
-    })
-
-    it('requires a single selected agent to sync', async () => {
-        vulnService.getVulns.mockResolvedValue({ data: mockVulns })
-
-        const wrapper = mount(Dashboard)
-        await flushPromises()
-
-        wrapper.vm.selectedConnection = 4
-        wrapper.vm.selectedAgents = []
-
-        await wrapper.vm.syncVulns()
-
-        expect(vulnService.syncVulns).not.toHaveBeenCalled()
-        expect(wrapper.vm.error).toContain('Selecciona un solo agente')
     })
 
     it('requires a connection before syncing', async () => {
