@@ -1119,7 +1119,8 @@ def test_vuln_without_cve_id_is_skipped(mock_fetch, client, db_session):
     assert db_session.query(WazuhVulnerability).count() == 0
 
 
-def test_viewer_role_forbidden_actions(client, db_session):
+@patch("app.routers.wazuh_router.fetch_all_vulns")
+def test_viewer_role_forbidden_actions(mock_fetch, client, db_session):
     _create_user(db_session, username="viewer_user", role="viewer")
     headers = _get_headers(client, username="viewer_user", password="admin")
     
@@ -1131,8 +1132,13 @@ def test_viewer_role_forbidden_actions(client, db_session):
     assert res2.status_code == 403
 
     conn = _create_connection(db_session)
-    res3 = client.post(f"/wazuh-connections/{conn.id}/sync", headers=headers)
-    assert res3.status_code == 403
+    mock_fetch.return_value = _raw_vuln()
+    res3 = client.post(
+        f"/wazuh-connections/{conn.id}/sync?agent_id=001",
+        headers=headers,
+    )
+    assert res3.status_code == 200
+    assert res3.json()["agent_id"] == "001"
 
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")
