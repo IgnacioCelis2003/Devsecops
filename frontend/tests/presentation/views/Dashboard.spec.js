@@ -1252,7 +1252,7 @@ describe('Dashboard.vue', () => {
             expect(wrapper.vm.isRecentlySeen(new Date().toISOString())).toBe(true)
         })
 
-        it('tests getStatusBadgeClass and non-admin syncVulns guard', async () => {
+        it('tests getStatusBadgeClass and syncVulns connection guard', async () => {
             localStorage.setItem('role', 'viewer')
             const wrapper = mount(Dashboard)
             await flushPromises()
@@ -1265,7 +1265,7 @@ describe('Dashboard.vue', () => {
             expect(wrapper.vm.getStatusBadgeClass('')).toBe('status-active')
 
             await wrapper.vm.syncVulns()
-            expect(wrapper.vm.error).toContain('Solo los administradores tienen permiso')
+            expect(wrapper.vm.error).toContain('Selecciona una conexión antes de sincronizar')
         })
 
         it('tests matchesStatus branches, itemsPerPage watch, unexpected payload, and matrix scroll', async () => {
