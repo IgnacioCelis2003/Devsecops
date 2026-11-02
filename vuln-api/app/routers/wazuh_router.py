@@ -1,7 +1,7 @@
 # app/routers/wazuh_router.py
 import os
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -17,7 +17,10 @@ from ..auth import get_current_user_enforcing_password_change, require_admin
 from ..clients.wazuh_client import test_connection, fetch_all_vulns
 from ..crypto import encrypt, decrypt
 from ..schemas.wazuh_schemas import WazuhConnectionRequest
-from ..services.wazuh_sync_service import process_wazuh_vulnerabilities
+from ..services.wazuh_sync_service import (
+    persist_vulnerability_events,
+    process_wazuh_vulnerabilities,
+)
 
 router = APIRouter()
 
@@ -171,6 +174,7 @@ def test_wazuh_connection(
 @router.post("/{conn_id}/sync")
 def sync_connection(
     conn_id: int,
+    background_tasks: BackgroundTasks,
     agent_id: str | None = Query(None),
     allow_empty: bool = Query(False),
     db: Session = Depends(get_db),
@@ -197,14 +201,20 @@ def sync_connection(
         ) from exc
 
     try:
+        event_rows: list[dict] = []
         count = process_wazuh_vulnerabilities(
             db,
             conn.id,
             raw_vulns,
             agent_id=agent_id,
             allow_empty=allow_empty,
+            event_sink=event_rows,
         )
         db.commit()
+        if event_rows:
+            background_tasks.add_task(
+                persist_vulnerability_events, db.get_bind(), event_rows
+            )
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc

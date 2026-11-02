@@ -12,6 +12,7 @@ from app.models import (
 )
 from app.auth import hash_password
 from app.crypto import encrypt
+from app.services.wazuh_sync_service import persist_vulnerability_events
 
 
 #helpers
@@ -944,6 +945,39 @@ def test_list_vulns_shows_connection_name(mock_fetch, client, db_session):
 
 
 # fetch vulns
+
+def test_persist_events_empty_is_noop():
+    persist_vulnerability_events(object(), [])
+
+
+@patch("app.services.wazuh_sync_service.Session")
+def test_persist_events_failure_is_logged(mock_session):
+    db = mock_session.return_value
+    db.commit.side_effect = RuntimeError("boom")
+
+    persist_vulnerability_events(object(), [{"event_type": "DETECTED"}])
+
+    db.rollback.assert_called_once()
+    db.close.assert_called_once()
+
+
+@patch("app.routers.wazuh_router.persist_vulnerability_events")
+@patch("app.routers.wazuh_router.fetch_all_vulns", return_value=MOCK_VULN)
+def test_sync_schedules_event_persistence(
+    mock_fetch, mock_persist, client, db_session
+):
+    _create_user(db_session)
+    conn = _create_connection(db_session)
+
+    res = client.post(
+        f"/wazuh-connections/{conn.id}/sync", headers=_get_headers(client)
+    )
+
+    assert res.status_code == 200
+    assert mock_persist.call_count == 1
+    _, events = mock_persist.call_args.args
+    assert events[0]["event_type"] == "DETECTED"
+
 
 @patch("app.routers.wazuh_router.fetch_all_vulns")
 def test_new_vuln_creates_detected_history(mock_fetch, client, db_session):
