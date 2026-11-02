@@ -1,9 +1,10 @@
 # app/routers/users_router.py
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import User
+from ..models import User, UserInteraction
 from ..auth import get_current_user, get_current_user_enforcing_password_change, require_admin, hash_password
 from ..schemas.user_schemas import NewUserRequest, UpdateUserRequest
 
@@ -92,6 +93,7 @@ def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+    db.execute(delete(UserInteraction).where(UserInteraction.user_id == user_id))
     db.delete(user)
     db.commit()
     return {"message": "Usuario eliminado"}
