@@ -19,19 +19,24 @@
         </div>
 
         <div class="title-bar-actions">
-          <label class="sync-agent-selector">
-            <span class="visually-hidden">Agente a sincronizar</span>
-            <select v-model="selectedAgentForSync" :disabled="syncing || !agentChoices.length" aria-label="Agente a sincronizar">
-              <option value="">Selecciona un agente</option>
-              <option v-for="agent in agentChoices" :key="agent.id" :value="agent.name">
-                {{ agent.name }} ({{ agent.id }})
+          <label class="sync-connection-selector">
+            <span class="visually-hidden">Conexión Wazuh a sincronizar</span>
+            <select
+              :value="selectedConnection"
+              @change="onConnectionSelect($event.target.value)"
+              :disabled="syncing || !connections.length"
+              aria-label="Conexión Wazuh a sincronizar"
+            >
+              <option value="">Selecciona una conexión</option>
+              <option v-for="connection in connections" :key="connection.id" :value="connection.id">
+                {{ connection.name }}
               </option>
             </select>
           </label>
-          <button class="btn btn-primary btn-sync-header" @click="syncVulns" :disabled="syncing || !selectedConnection || !selectedAgentId" :title="selectedAgentId ? `Sincronizar ${selectedAgentForSync}` : 'Selecciona un agente para sincronizar'">
+          <button class="btn btn-primary btn-sync-header" @click="syncVulns" :disabled="syncing || !selectedConnection" :title="selectedConnection ? 'Sincronizar conexión Wazuh' : 'Selecciona una conexión Wazuh'">
             <svg v-if="syncing" class="spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="18" y1="7.76" x2="19.07" y2="4.93"></line></svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.5l1.75 1.93"></path></svg>
-            {{ syncing ? 'Sincronizando...' : 'Sincronizar agente' }}
+            {{ syncing ? 'Sincronizando...' : 'Sincronizar conexión' }}
           </button>
         </div>
       </div>
@@ -730,7 +735,6 @@ const pageJump = 10
 // Filtros avanzados
 const connections = ref([])
 const agentOptions = ref([])
-const selectedAgentForSync = ref('')
 const vulnOptions = ref([])
 const packageOptions = ref([])
 const severityOptions = ref([])
@@ -745,19 +749,6 @@ const selectedTags = ref([])
 const selectedStatus = ref('all') // 'all' | 'active' | 'resolved'
 const scoreMin = ref('')
 const scoreMax = ref('')
-
-const agentChoices = computed(() => {
-  const agents = new Map()
-  vulns.value.forEach(vuln => {
-    if (vuln.agent_id && (vuln.agent_name || vuln.agent_id)) {
-      agents.set(String(vuln.agent_id), {
-        id: String(vuln.agent_id),
-        name: vuln.agent_name || String(vuln.agent_id)
-      })
-    }
-  })
-  return Array.from(agents.values()).sort((a, b) => a.name.localeCompare(b.name))
-})
 
 // Dropdown state
 const search = reactive({ agent: '', vuln: '', package: '', tag: '' })
@@ -1073,7 +1064,6 @@ const sortBy = (key) => {
 
 const onConnectionChange = async () => {
   selectedAgents.value = []
-  selectedAgentForSync.value = ''
   selectedVulns.value = []
   selectedPackages.value = []
   selectedSeverities.value = []
@@ -1088,7 +1078,6 @@ const onConnectionChange = async () => {
 const clearFilters = () => {
   selectedConnection.value = ''
   selectedAgents.value = []
-  selectedAgentForSync.value = ''
   selectedVulns.value = []
   selectedPackages.value = []
   selectedSeverities.value = []
@@ -1185,28 +1174,15 @@ const fetchConnections = async () => {
   }
 }
 
-const selectedAgentId = computed(() => {
-  if (selectedAgentForSync.value) {
-    return agentChoices.value.find(agent => agent.name === selectedAgentForSync.value)?.id || null
-  }
-  if (selectedAgents.value.length !== 1) return null
-  const agentName = selectedAgents.value[0]
-  return vulns.value.find(v => v.agent_name === agentName)?.agent_id || null
-})
-
 const syncVulns = async () => {
   if (!selectedConnection.value) {
     error.value = 'Selecciona una conexión antes de sincronizar.'
     return
   }
-  if (!selectedAgentId.value) {
-    error.value = 'Selecciona un solo agente para sincronizar.'
-    return
-  }
   syncing.value = true
   error.value = ''
   try {
-    await vulnService.syncVulns(selectedConnection.value, selectedAgentId.value)
+    await vulnService.syncVulns(selectedConnection.value)
     await fetchVulns()
   } catch (err) {
     error.value = err.response?.data?.detail || 'Error durante la sincronización con Wazuh. Verifica tu configuración en Admin Wazuh.'
@@ -1360,7 +1336,7 @@ onMounted(async () => {
   gap: 0.75rem;
 }
 
-.sync-agent-selector select {
+.sync-connection-selector select {
   min-width: 13rem;
   padding: 0.42rem 0.65rem;
   color: var(--text-main);
