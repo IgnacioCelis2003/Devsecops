@@ -7,10 +7,10 @@ RUN npm ci --ignore-scripts
 # Copiamos el código fuente
 COPY . .
 
-# Definimos las variables de entorno para el build de Vite (con valores por defecto para grupo3)
-ARG VITE_API_URL=/grupo3/api
+# Variables de Vite para despliegue local (el proxy /grupo3 se configura en .env)
+ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
-ARG VITE_BASE=/grupo3/
+ARG VITE_BASE=/
 ENV VITE_BASE=$VITE_BASE
 
 RUN npm run build
