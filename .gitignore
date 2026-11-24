@@ -62,3 +62,5 @@ letsencrypt/
 # Infrastructure state
 *.tfstate
 *.tfstate.*
+
+.opencode/

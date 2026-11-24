@@ -22,6 +22,10 @@ if command -v podman-compose >/dev/null 2>&1; then
     USE_PODMAN=1
     COMPOSE_CMD="podman-compose"
     CONTAINER_ENGINE="podman"
+elif docker info >/dev/null 2>&1; then
+    USE_PODMAN=0
+    COMPOSE_CMD="docker compose"
+    CONTAINER_ENGINE="docker"
 else
     USE_PODMAN=0
     COMPOSE_CMD="sudo -E docker compose"
@@ -39,10 +43,9 @@ echo "================================================="
 read -p "Selecciona una opción (1 o 2): " OPCION
 
 if [ "$OPCION" == "1" ]; then
-    echo -e "\n[+] Deteniendo contenedores y limpiando certificados y volúmenes anteriores..."
-    $COMPOSE_CMD down -v 2>/dev/null
+    echo -e "\n[+] Deteniendo contenedores y conservando la base de datos..."
+    $COMPOSE_CMD down 2>/dev/null
     if [ "$USE_PODMAN" -eq 1 ]; then
-        podman volume rm -f vulnapp_postgres_api_data postgres_api_data 2>/dev/null || true
         "$MKDIR_BIN" -p "$HOME/.config/containers"
         if [ ! -f "$HOME/.config/containers/registries.conf" ]; then
             cat << 'EOF' > "$HOME/.config/containers/registries.conf"
@@ -61,7 +64,11 @@ EOF
 
     echo "[+] Generando certificados autofirmados locales..."
     "$MKDIR_BIN" -p ./nginx/ssl
+    LOCAL_IP=$(hostname -I 2>/dev/null | cut -d' ' -f1)
     CERT_SAN="DNS:localhost,IP:127.0.0.1,IP:::1"
+    if [ -n "$LOCAL_IP" ]; then
+        CERT_SAN="$CERT_SAN,IP:$LOCAL_IP"
+    fi
     "$OPENSSL_BIN" req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout ./nginx/ssl/nginx-selfsigned.key \
         -out ./nginx/ssl/nginx-selfsigned.crt \
@@ -96,6 +103,10 @@ EOF
 
     echo "[+] Levantando contenedores..."
     $COMPOSE_CMD up -d --build
+    echo "[+] Sitio local: https://localhost:8103 (acepta el certificado autofirmado)"
+    if [ -n "$LOCAL_IP" ]; then
+        echo "[+] Red local: https://$LOCAL_IP:8103"
+    fi
 
 elif [ "$OPCION" == "2" ]; then
     echo -e "\n[+] Configurando entorno CON dominio..."
